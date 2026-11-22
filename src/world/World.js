@@ -1,0 +1,109 @@
+import * as THREE from 'three';
+import { buildCityLayout, districtAt, DISTRICTS } from './CityLayout.js';
+import { TextureFactory } from './TextureFactory.js';
+import { MaterialLibrary } from './Materials.js';
+import { CityBuilder } from './CityBuilder.js';
+import { Sky } from './Sky.js';
+import { CollisionWorld } from '../physics/CollisionWorld.js';
+
+// ============================================================================
+// World System: escena, ciudad, cielo, hora del día y colisiones.
+// ============================================================================
+
+export class World {
+  constructor(renderer, settings) {
+    this.renderer = renderer;
+    this.settings = settings;
+    this.scene = new THREE.Scene();
+    this.collision = new CollisionWorld();
+    this.timeOfDay = 9;
+    this.timeScale = 1 / 60; // 1 segundo real = 1 minuto de juego (día de 24 min)
+    this.clock = 0;
+    this.envTimer = 0;
+    this.envHour = -10;
+    this.pmrem = null;
+  }
+
+  // Generador por etapas para la pantalla de carga.
+  *loadSteps() {
+    const preset = this.settings.preset;
+    yield 'Diseñando San Vega';
+    this.layout = buildCityLayout();
+    yield 'Pintando texturas';
+    const aniso = Math.min(preset.textureSize >= 512 ? 4 : 1, this.renderer.capabilities.getMaxAnisotropy());
+    this.textures = new TextureFactory(preset.textureSize, aniso);
+    this.materials = new MaterialLibrary(this.textures, preset.lighting);
+    this.city = new CityBuilder(this.layout, this.materials, this.collision);
+    for (const step of this.city.buildSteps()) yield step;
+    this.scene.add(this.city.root);
+    yield 'Encendiendo el cielo';
+    this.sky = new Sky(this.scene);
+    this.applyQuality();
+  }
+
+  applyQuality() {
+    const s = this.settings;
+    const preset = s.preset;
+    this.materials.setLighting(preset.lighting, this.scene);
+    const shadows = s.get('shadows');
+    this.renderer.shadowMap.enabled = shadows;
+    this.sky.configureShadows(shadows, preset.shadowMapSize, preset.shadowMapSize >= 2048 ? 75 : 55);
+    this.scene.traverse((o) => {
+      if (o.material) o.material.needsUpdate = true;
+    });
+    this.useEnv = preset.lighting === 'standard';
+    if (!this.useEnv) this.scene.environment = null;
+    this.envHour = -10;
+  }
+
+  get drawDistance() {
+    return this.settings.get('drawDistance');
+  }
+
+  get night() {
+    return this.sky?.night ?? 0;
+  }
+
+  districtAt(x, z) {
+    const d = districtAt(this.layout, x, z);
+    return d ? { id: d, ...DISTRICTS[d] } : null;
+  }
+
+  update(dt, camera, focus) {
+    this.clock += dt;
+    this.timeOfDay = (this.timeOfDay + dt * this.timeScale) % 24;
+    this.sky.update(this.timeOfDay, camera, focus, this.drawDistance);
+    this.materials.updateNight(this.sky.night);
+    this.city.setNight(this.sky.night);
+    this.city.update(dt, this.clock);
+    // mapa de entorno (reflejos) regenerado cada media hora de juego
+    if (this.useEnv && Math.abs(this.timeOfDay - this.envHour) > 0.5) this.regenerateEnv();
+  }
+
+  updateVisibility(camPos) {
+    const preset = this.settings.preset;
+    const draw = this.drawDistance;
+    this.city.updateVisibility(camPos, draw, Math.min(draw, preset.detailDistance));
+  }
+
+  regenerateEnv() {
+    this.envHour = this.timeOfDay;
+    if (!this.pmrem) this.pmrem = new THREE.PMREMGenerator(this.renderer);
+    if (!this.envScene) {
+      this.envScene = new THREE.Scene();
+      this.envDome = new THREE.Mesh(new THREE.SphereGeometry(10, 24, 12), this.sky.dome.material);
+      this.envScene.add(this.envDome);
+      const ground = new THREE.Mesh(new THREE.CircleGeometry(9, 16), new THREE.MeshBasicMaterial({ color: 0x55524c }));
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -1;
+      this.envScene.add(ground);
+      this.envGround = ground;
+    }
+    this.envGround.material.color.copy(this.sky.uniforms.groundColor.value).multiplyScalar(1.4);
+    const old = this.envRT;
+    this.envRT = this.pmrem.fromScene(this.envScene, 0, 0.1, 50);
+    this.scene.environment = this.envRT.texture;
+    this.scene.environmentIntensity = 0.55;
+    old?.dispose();
+  }
+}

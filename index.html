@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CITY LIFE — SHOFE GAMES</title>
+  <meta name="description" content="CITY LIFE: juego 3D de mundo abierto en San Vega. Un juego de SHOFE GAMES." />
+  <link rel="stylesheet" href="./src/ui/style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="game-canvas" tabindex="0"></canvas>
+
+    <!-- ============ PANTALLA DE CARGA ============ -->
+    <section id="screen-loading" class="screen active">
+      <div class="loading-inner">
+        <div class="brand-small">SHOFE GAMES</div>
+        <h1 class="logo">CITY<span>LIFE</span></h1>
+        <div class="loading-bar"><div class="loading-fill" id="loading-fill"></div></div>
+        <div class="loading-text" id="loading-text">Iniciando...</div>
+        <div class="loading-tip" id="loading-tip"></div>
+      </div>
+    </section>
+
+    <!-- ============ ERROR ============ -->
+    <section id="screen-error" class="screen">
+      <div class="panel panel-narrow">
+        <h2>No se pudo iniciar CITY LIFE</h2>
+        <p id="error-text"></p>
+        <p class="muted">Probá con Google Chrome o Microsoft Edge actualizados y con la aceleración por hardware activada.</p>
+      </div>
+    </section>
+
+    <!-- ============ MENÚ PRINCIPAL ============ -->
+    <section id="screen-menu" class="screen">
+      <div class="menu-side">
+        <div class="brand-small">SHOFE GAMES</div>
+        <h1 class="logo">CITY<span>LIFE</span></h1>
+        <div class="menu-sub">San Vega te espera.</div>
+        <nav class="menu-buttons">
+          <button class="btn btn-primary" data-action="continue" id="btn-continue">Continuar</button>
+          <button class="btn" data-action="new-game">Nueva partida</button>
+          <button class="btn" data-action="how-to-play">Cómo jugar</button>
+          <button class="btn" data-action="settings">Configuración</button>
+          <button class="btn" data-action="credits">Créditos</button>
+        </nav>
+        <div class="menu-footer">v<span id="version"></span> · Un jugador · Sin conexión</div>
+      </div>
+    </section>
+
+    <!-- ============ PAUSA ============ -->
+    <section id="screen-pause" class="screen">
+      <div class="menu-side">
+        <div class="brand-small">PAUSA</div>
+        <h2 class="pause-title">CITY<span>LIFE</span></h2>
+        <nav class="menu-buttons">
+          <button class="btn btn-primary" data-action="resume">Reanudar</button>
+          <button class="btn" data-action="map">Mapa de San Vega</button>
+          <button class="btn" data-action="save">Guardar partida</button>
+          <button class="btn" data-action="load">Cargar partida</button>
+          <button class="btn" data-action="how-to-play">Cómo jugar</button>
+          <button class="btn" data-action="settings">Configuración</button>
+          <button class="btn btn-ghost" data-action="quit">Salir al menú principal</button>
+        </nav>
+      </div>
+    </section>
+
+    <!-- ============ CONFIGURACIÓN ============ -->
+    <section id="screen-settings" class="screen screen-dim">
+      <div class="panel panel-wide">
+        <div class="panel-head">
+          <h2>Configuración</h2>
+          <button class="btn btn-small" data-action="back">Volver</button>
+        </div>
+        <div class="tabs" id="settings-tabs">
+          <button class="tab active" data-tab="graphics">Gráficos</button>
+          <button class="tab" data-tab="audio">Sonido</button>
+          <button class="tab" data-tab="controls">Controles</button>
+          <button class="tab" data-tab="game">Partida</button>
+        </div>
+        <div class="tab-body" id="tab-graphics"></div>
+        <div class="tab-body hidden" id="tab-audio"></div>
+        <div class="tab-body hidden" id="tab-controls"></div>
+        <div class="tab-body hidden" id="tab-game"></div>
+      </div>
+    </section>
+
+    <!-- ============ CÓMO JUGAR ============ -->
+    <section id="screen-help" class="screen screen-dim">
+      <div class="panel panel-wide">
+        <div class="panel-head">
+          <h2>Cómo jugar</h2>
+          <button class="btn btn-small" data-action="back">Volver</button>
+        </div>
+        <div class="help-grid">
+          <div>
+            <h3>A pie</h3>
+            <table class="keys" id="help-foot"></table>
+          </div>
+          <div>
+            <h3>Conduciendo</h3>
+            <table class="keys" id="help-vehicle"></table>
+          </div>
+        </div>
+        <p class="muted">Podés cambiar cualquier tecla en Configuración → Controles. Las flechas también sirven para moverte.</p>
+      </div>
+    </section>
+
+    <!-- ============ CRÉDITOS ============ -->
+    <section id="screen-credits" class="screen screen-dim">
+      <div class="panel panel-narrow">
+        <div class="panel-head">
+          <h2>Créditos</h2>
+          <button class="btn btn-small" data-action="back">Volver</button>
+        </div>
+        <p><strong>CITY LIFE</strong> es un juego de <strong>SHOFE GAMES</strong>.</p>
+        <p>Ciudad, personajes, modelos, texturas y sonidos generados por el propio juego.</p>
+        <p class="muted">Motor gráfico: Three.js (licencia MIT).</p>
+      </div>
+    </section>
+
+    <!-- ============ MAPA ============ -->
+    <section id="screen-map" class="screen screen-dim">
+      <div class="map-wrap">
+        <div class="panel-head">
+          <h2>San Vega</h2>
+          <button class="btn btn-small" data-action="back">Cerrar (M)</button>
+        </div>
+        <div class="map-body">
+          <canvas id="map-canvas"></canvas>
+          <div class="map-legend" id="map-legend"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ HUD ============ -->
+    <section id="hud" class="hidden">
+      <div class="hud-top-right">
+        <div class="hud-time" id="hud-time">08:00</div>
+        <div class="hud-money" id="hud-money">$0</div>
+        <div class="hud-wanted" id="hud-wanted"></div>
+      </div>
+      <div class="hud-objective hidden" id="hud-objective"></div>
+      <div class="hud-district" id="hud-district"></div>
+      <div class="hud-bottom-left">
+        <div class="minimap-wrap">
+          <canvas id="minimap" width="200" height="200"></canvas>
+          <div class="minimap-north">N</div>
+        </div>
+        <div class="hud-bars">
+          <div class="bar bar-health"><div id="bar-health"></div></div>
+          <div class="bar bar-stamina"><div id="bar-stamina"></div></div>
+        </div>
+      </div>
+      <div class="hud-speed hidden" id="hud-speed"></div>
+      <div class="hud-prompt hidden" id="hud-prompt"></div>
+      <div class="hud-toast" id="hud-toast"></div>
+      <div class="hud-fps hidden" id="hud-fps"></div>
+      <div class="hud-tutorial hidden" id="hud-tutorial">
+        <div class="tut-label">TUTORIAL</div>
+        <div class="tut-text" id="tut-text"></div>
+        <div class="tut-progress" id="tut-progress"></div>
+        <button class="btn btn-small btn-ghost" id="tut-skip">Saltar tutorial</button>
+      </div>
+      <div class="click-to-play hidden" id="click-to-play">Hacé clic para controlar la cámara</div>
+    </section>
+
+    <!-- ============ DIÁLOGO ============ -->
+    <div id="dialog" class="dialog hidden">
+      <div class="panel panel-narrow">
+        <h3 id="dialog-title"></h3>
+        <p id="dialog-text"></p>
+        <div class="dialog-buttons">
+          <button class="btn btn-ghost" id="dialog-cancel">Cancelar</button>
+          <button class="btn btn-primary" id="dialog-ok">Aceptar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
