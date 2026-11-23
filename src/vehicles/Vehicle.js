@@ -235,6 +235,12 @@ export class Vehicle {
       Fx -= (this.vx / speed) * roll;
       Fz -= (this.vz / speed) * roll;
     }
+    // pendiente: en las subidas el auto pierde velocidad y en las bajadas gana
+    if (Math.abs(this.groundPitch) > 0.015 && (this.driver || speed > 0.5)) {
+      const Fg = m * G * Math.sin(this.groundPitch);
+      Fx += fx * Fg;
+      Fz += fz * Fg;
+    }
     const torque = this.a * (FyF * cs + FlF * ss) - this.b * FyR;
 
     this.vx += (Fx / m) * dt;

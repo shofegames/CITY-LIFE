@@ -152,15 +152,23 @@ function populateBlock(L, b) {
 
   switch (b.district) {
     case 'downtown': {
-      // 2x2 torres
       const cx = (b.ix0 + b.ix1) / 2, cz = (b.iz0 + b.iz1) / 2;
       const distCenter = Math.hypot(cx, cz);
-      const lots = splitRect(b.ix0, b.iz0, b.ix1, b.iz1, 2, 2, 3);
+      // Torre Vega: el rascacielos más alto de la ciudad
+      if (b.bx === 5 && b.bz === 5) {
+        addLandmarkTower(L, b, rng);
+        break;
+      }
+      // cada manzana se divide distinto: 4 torres, 2 torres o una grande
+      const r = rng.next();
+      const lots = r < 0.45 ? splitRect(b.ix0, b.iz0, b.ix1, b.iz1, 2, 2, 3)
+        : r < 0.8 ? (rng.chance(0.5) ? splitRect(b.ix0, b.iz0, b.ix1, b.iz1, 2, 1, 4) : splitRect(b.ix0, b.iz0, b.ix1, b.iz1, 1, 2, 4))
+          : [{ x0: b.ix0, z0: b.iz0, x1: b.ix1, z1: b.iz1 }];
       lots.forEach((lot) => {
-        const base = 150 - distCenter * 0.28;
-        const height = snap(rng.range(base * 0.45, base), 3.6, 24);
+        const base = (165 - distCenter * 0.3) * (lots.length === 1 ? 1.15 : 1);
+        const height = snap(rng.range(base * 0.3, base * 1.05), 3.6, 20);
         const style = rng.chance(0.55) ? 'glass' : 'office';
-        addTower(L, lot, height, style, rng, 1.5);
+        addTower(L, lot, height, style, rng, lots.length === 1 ? 6 : 1.5);
       });
       break;
     }
@@ -268,6 +276,8 @@ function addTower(L, lot, height, style, rng, margin) {
   const cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2;
   const bld = { style, kind: 'tower', parts: [], details: [], height, tint: towerTint(style, rng), uOffset: rng.int(0, 3) };
   const lobby = 5.4;
+  const shape = height < 45 ? 'box' : rng.pick(['setback', 'tiered', 'tiered', 'slender', 'twin', 'crown', 'lshape']);
+  if (shape !== 'box' && shape !== 'setback') return addShapedTower(L, lot, bld, shape, { cx, cz, w, d, bay, lobby, height, style }, rng);
   bld.parts.push({ x0: cx - w / 2, z0: cz - d / 2, x1: cx + w / 2, z1: cz + d / 2, y0: CURB, y1: CURB + lobby, mat: 'lobby' });
   if (height > 70 && rng.chance(0.75)) {
     const h1 = snap(height * rng.range(0.5, 0.65), 3.6, 20);
@@ -287,6 +297,109 @@ function addTower(L, lot, height, style, rng, margin) {
   if (rng.chance(0.22)) bld.details.push({ type: 'roofSign', word: rng.pick(['VEGA', 'CASINO', 'SAN VEGA', 'COSTA AZUL', 'HOTEL']), face: rng.pick(['n', 's', 'e', 'w']), ...bld.top });
   if (rng.chance(0.3)) bld.details.push({ type: 'trim', ...bld.top, color: rng.pick(NEON_HEX) });
   L.surfaces.push({ type: 'plaza', x0: lot.x0, z0: lot.z0, x1: lot.x1, z1: lot.z1 });
+  L.buildings.push(bld);
+}
+
+// Torres con formas distintas: escalonadas, finas con basamento, gemelas, con corona o en L.
+function addShapedTower(L, lot, bld, shape, o, rng) {
+  const { cx, cz, w, d, bay, lobby, height, style } = o;
+  const box = (x0, z0, x1, z1, y0, y1, mat = style) => bld.parts.push({ x0, z0, x1, z1, y0, y1, mat });
+  const fit = (v, f) => Math.max(9, Math.floor((v * f) / bay) * bay);
+  let top = null;
+  box(cx - w / 2, cz - d / 2, cx + w / 2, cz + d / 2, CURB, CURB + lobby, 'lobby');
+  if (shape === 'tiered') {
+    let y = CURB + lobby;
+    const h1 = snap(height * 0.42, 3.6, 12), h2 = snap(height * 0.33, 3.6, 10), h3 = Math.max(10, height - h1 - h2);
+    box(cx - w / 2, cz - d / 2, cx + w / 2, cz + d / 2, y, (y += h1));
+    bld.details.push({ type: 'ledge', x0: cx - w / 2, z0: cz - d / 2, x1: cx + w / 2, z1: cz + d / 2, y });
+    const w2 = fit(w, 0.78), d2 = fit(d, 0.78);
+    box(cx - w2 / 2, cz - d2 / 2, cx + w2 / 2, cz + d2 / 2, y, (y += h2));
+    bld.details.push({ type: 'ledge', x0: cx - w2 / 2, z0: cz - d2 / 2, x1: cx + w2 / 2, z1: cz + d2 / 2, y });
+    const w3 = fit(w, 0.56), d3 = fit(d, 0.56);
+    box(cx - w3 / 2, cz - d3 / 2, cx + w3 / 2, cz + d3 / 2, y, (y += h3));
+    top = { x0: cx - w3 / 2, z0: cz - d3 / 2, x1: cx + w3 / 2, z1: cz + d3 / 2, y };
+  } else if (shape === 'slender') {
+    const podium = snap(rng.range(10, 18), 3.6, 10);
+    box(cx - w / 2, cz - d / 2, cx + w / 2, cz + d / 2, CURB + lobby, CURB + lobby + podium, 'office');
+    bld.details.push({ type: 'ledge', x0: cx - w / 2, z0: cz - d / 2, x1: cx + w / 2, z1: cz + d / 2, y: CURB + lobby + podium });
+    const w2 = fit(w, 0.55), d2 = fit(d, 0.55);
+    box(cx - w2 / 2, cz - d2 / 2, cx + w2 / 2, cz + d2 / 2, CURB + lobby + podium, CURB + lobby + height);
+    top = { x0: cx - w2 / 2, z0: cz - d2 / 2, x1: cx + w2 / 2, z1: cz + d2 / 2, y: CURB + lobby + height };
+  } else if (shape === 'twin') {
+    const alongX = w >= d;
+    const gap = 6;
+    const tw2 = alongX ? fit((w - gap) / 2, 1) : fit(w, 0.8), td2 = alongX ? fit(d, 0.8) : fit((d - gap) / 2, 1);
+    const h2 = snap(height * rng.range(0.82, 1), 3.6, 20);
+    for (const sgn of [-1, 1]) {
+      const ox = alongX ? sgn * (tw2 / 2 + gap / 2) : 0, oz = alongX ? 0 : sgn * (td2 / 2 + gap / 2);
+      const hh = sgn < 0 ? height : h2;
+      box(cx + ox - tw2 / 2, cz + oz - td2 / 2, cx + ox + tw2 / 2, cz + oz + td2 / 2, CURB + lobby, CURB + lobby + hh);
+      const t = { x0: cx + ox - tw2 / 2, z0: cz + oz - td2 / 2, x1: cx + ox + tw2 / 2, z1: cz + oz + td2 / 2, y: CURB + lobby + hh };
+      bld.details.push({ type: 'crownBand', ...t, y: t.y - 3, h: 0.5, color: rng.pick(NEON_HEX) });
+      if (sgn > 0) bld.details.push({ type: 'parapet', ...t });
+      else top = t;
+    }
+  } else if (shape === 'crown') {
+    box(cx - w / 2, cz - d / 2, cx + w / 2, cz + d / 2, CURB + lobby, CURB + lobby + height);
+    top = { x0: cx - w / 2, z0: cz - d / 2, x1: cx + w / 2, z1: cz + d / 2, y: CURB + lobby + height };
+    bld.details.push({ type: 'pyramid', ...top, h: Math.min(w, d) * rng.range(0.45, 0.8), mat: rng.chance(0.5) ? 'glass' : 'metal', color: rng.pick([0xb8c4cc, 0x9fb7c9, 0xd9c27a]) });
+    bld.details.push({ type: 'crownBand', ...top, y: top.y - 2.2, h: 0.45, color: rng.pick(NEON_HEX) });
+    bld.crowned = true;
+  } else {
+    // en L: una parte alta y otra más baja
+    const alongX = w >= d;
+    const h2 = snap(height * rng.range(0.4, 0.6), 3.6, 14);
+    if (alongX) {
+      const xm = cx - w / 2 + fit(w, 0.5);
+      box(cx - w / 2, cz - d / 2, xm, cz + d / 2, CURB + lobby, CURB + lobby + height);
+      box(xm, cz - d / 2, cx + w / 2, cz + d / 2, CURB + lobby, CURB + lobby + h2);
+      top = { x0: cx - w / 2, z0: cz - d / 2, x1: xm, z1: cz + d / 2, y: CURB + lobby + height };
+      bld.details.push({ type: 'parapet', x0: xm, z0: cz - d / 2, x1: cx + w / 2, z1: cz + d / 2, y: CURB + lobby + h2 });
+    } else {
+      const zm = cz - d / 2 + fit(d, 0.5);
+      box(cx - w / 2, cz - d / 2, cx + w / 2, zm, CURB + lobby, CURB + lobby + height);
+      box(cx - w / 2, zm, cx + w / 2, cz + d / 2, CURB + lobby, CURB + lobby + h2);
+      top = { x0: cx - w / 2, z0: cz - d / 2, x1: cx + w / 2, z1: zm, y: CURB + lobby + height };
+      bld.details.push({ type: 'parapet', x0: cx - w / 2, z0: zm, x1: cx + w / 2, z1: cz + d / 2, y: CURB + lobby + h2 });
+    }
+  }
+  bld.top = top;
+  // colisión: un bloque por parte (las torres gemelas tienen un pasillo entre medio)
+  bld.colliders = bld.parts.map((q) => ({ x0: q.x0, z0: q.z0, x1: q.x1, z1: q.z1, y1: q.y1 }));
+  bld.details.push({ type: 'canopy', x0: cx - w / 2, z0: cz - d / 2, x1: cx + w / 2, z1: cz + d / 2, y: CURB + 4.2 });
+  if (!bld.crowned) addRoofDetails(bld, rng, height > 100);
+  if (height > 120 && !bld.crowned && rng.chance(0.5)) bld.details.push({ type: 'spire', x: (top.x0 + top.x1) / 2, z: (top.z0 + top.z1) / 2, y: top.y, r: 1.2, h: rng.range(18, 34) });
+  bld.footprint = { x0: cx - w / 2, z0: cz - d / 2, x1: cx + w / 2, z1: cz + d / 2 };
+  if (rng.chance(0.25)) bld.details.push({ type: 'roofSign', word: rng.pick(['VEGA', 'CASINO', 'SAN VEGA', 'COSTA AZUL', 'HOTEL']), face: rng.pick(['n', 's', 'e', 'w']), ...top });
+  if (rng.chance(0.3)) bld.details.push({ type: 'trim', ...top, color: rng.pick(NEON_HEX) });
+  L.surfaces.push({ type: 'plaza', x0: lot.x0, z0: lot.z0, x1: lot.x1, z1: lot.z1 });
+  L.buildings.push(bld);
+}
+
+// Torre Vega: rascacielos emblema (escalonado, corona de vidrio y aguja)
+function addLandmarkTower(L, b, rng) {
+  const cx = (b.ix0 + b.ix1) / 2, cz = (b.iz0 + b.iz1) / 2;
+  const bld = { style: 'glass', kind: 'tower', parts: [], details: [], height: 236, tint: 0xd6ecff, uOffset: 0, name: 'Torre Vega' };
+  const lobby = 7.2;
+  let y = CURB;
+  const tiers = [[48, 48, lobby, 'lobby'], [48, 48, 64.8], [39, 39, 57.6], [30, 30, 50.4], [21, 21, 36]];
+  for (const [w, d, h, mat] of tiers) {
+    bld.parts.push({ x0: cx - w / 2, z0: cz - d / 2, x1: cx + w / 2, z1: cz + d / 2, y0: y, y1: y + h, mat: mat || 'glass' });
+    y += h;
+    if (!mat) bld.details.push({ type: 'crownBand', x0: cx - w / 2, z0: cz - d / 2, x1: cx + w / 2, z1: cz + d / 2, y: y - 0.6, h: 0.6, color: 0x2ff5ff });
+  }
+  const top = { x0: cx - 10.5, z0: cz - 10.5, x1: cx + 10.5, z1: cz + 10.5, y };
+  bld.top = top;
+  bld.details.push({ type: 'pyramid', ...top, h: 16, mat: 'glass', color: 0xc8e6ff });
+  bld.details.push({ type: 'spire', x: cx, z: cz, y: y + 14, r: 1.4, h: 40 });
+  bld.details.push({ type: 'canopy', x0: cx - 24, z0: cz - 24, x1: cx + 24, z1: cz + 24, y: CURB + 5.5 });
+  bld.details.push({ type: 'roofSign', word: 'SAN VEGA', face: 's', x0: cx - 24, z0: cz - 24, x1: cx + 24, z1: cz + 24, y: CURB + lobby + 64.8 });
+  bld.footprint = { x0: cx - 24, z0: cz - 24, x1: cx + 24, z1: cz + 24 };
+  bld.colliders = bld.parts.map((q) => ({ x0: q.x0, z0: q.z0, x1: q.x1, z1: q.z1, y1: q.y1 }));
+  bld.height = y - CURB;
+  L.surfaces.push({ type: 'plaza', x0: b.ix0, z0: b.iz0, x1: b.ix1, z1: b.iz1 });
+  for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) L.props.palms.push({ x: cx + ox * 32, z: cz + oz * 32, s: 1.2 });
+  L.landmarks.push({ name: 'Torre Vega', x: cx, z: cz, type: 'tower' });
   L.buildings.push(bld);
 }
 

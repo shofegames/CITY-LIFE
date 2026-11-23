@@ -16,6 +16,9 @@ const TIPS = [
   'Con la rueda del mouse acercás o alejás la cámara.',
   'Tu partida se guarda sola cada minuto. También podés guardar desde la pausa.',
   'De noche las ventanas se encienden y los faroles iluminan las veredas.',
+  'Salí de la ciudad por la Ruta del Monte y subí hasta el Observatorio: desde ahí se ve toda la isla.',
+  'La Ruta Costera Norte te lleva al Puerto Viejo, un pueblo de pescadores.',
+  'Por el Camino del Oeste llegás al Lago Azul, al Rancho Las Palmas y al Faro del Oeste.',
 ];
 
 export class UI {

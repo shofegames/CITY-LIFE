@@ -158,6 +158,23 @@ export class TextureFactory {
     return { map: this.tex(c), tileW: 6, tileH: 6 };
   }
 
+  // Terreno de la isla: gris claro con manchas (el color lo dan los vértices).
+  make_terrain() {
+    const { c, ctx } = this.canvas();
+    const rng = createRng(77);
+    ctx.fillStyle = '#d2d2d2';
+    ctx.fillRect(0, 0, BASE, BASE);
+    for (let i = 0; i < 40; i++) {
+      const v = rng.int(150, 235);
+      ctx.fillStyle = `rgba(${v},${v},${v},${rng.range(0.15, 0.35)})`;
+      ctx.beginPath();
+      ctx.ellipse(rng.range(0, BASE), rng.range(0, BASE), rng.range(20, 80), rng.range(15, 60), rng.range(0, 3), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    this.noise(ctx, rng, 14000, (r) => { const v = r.int(120, 250); return `rgba(${v},${v},${v},0.35)`; }, 1, 2);
+    return { map: this.tex(c), tileW: 9, tileH: 9 };
+  }
+
   make_sand() {
     const { c, ctx } = this.canvas();
     const rng = createRng(16);

@@ -1,11 +1,12 @@
 import { DISTRICTS, BEACH } from '../world/CityLayout.js';
+import { ISLAND, SEA } from '../world/Island.js';
 
 // ============================================================================
 // Map System: dibuja San Vega una sola vez en un canvas (1 px = 1 m) y lo
 // reutiliza para el minimapa rotatorio y el mapa completo.
 // ============================================================================
 
-const MIN_X = -620, MAX_X = 700, MIN_Z = -620, MAX_Z = 620;
+const MIN_X = ISLAND.minX, MAX_X = ISLAND.maxX, MIN_Z = ISLAND.minZ, MAX_Z = ISLAND.maxZ;
 
 export class MapSystem {
   constructor(layout) {
@@ -31,11 +32,11 @@ export class MapSystem {
       ctx.fillStyle = color;
       ctx.fillRect(a, b, x1 - x0, z1 - z0);
     };
-    ctx.fillStyle = '#26352a';
+    ctx.fillStyle = '#1b4a66';
     ctx.fillRect(0, 0, this.base.width, this.base.height);
-    // playa y mar
-    rect(BEACH.x0, MIN_Z, BEACH.waterX, MAX_Z, '#b59d6e');
-    rect(BEACH.waterX, MIN_Z, MAX_X, MAX_Z, '#1b4a66');
+    if (L.island) this.drawIsland(ctx);
+    // playa de Costa Azul
+    rect(BEACH.x0, L.roadExtent.min - 40, BEACH.waterX, L.roadExtent.max + 40, '#b59d6e');
     // calles (asfalto)
     const E = L.roadExtent;
     rect(E.min, E.min, E.max, E.max, '#5c6168');
@@ -74,6 +75,62 @@ export class MapSystem {
     }
   }
 
+  // Relieve de la isla (1 píxel cada 4 m, agrandado) + rutas.
+  drawIsland(ctx) {
+    const I = this.L.island;
+    const img = new ImageData(I.W, I.H);
+    const d = img.data;
+    for (let j = 0; j < I.H; j++) {
+      for (let i = 0; i < I.W; i++) {
+        const k = j * I.W + i;
+        const h = I.heights[k];
+        let r, g, b;
+        if (h < SEA) {
+          const t = Math.min(1, (SEA - h) / 9);
+          r = 70 - 43 * t; g = 165 - 91 * t; b = 175 - 73 * t;
+        } else if (I.surf[k] === 4) { r = 196; g = 176; b = 128; }
+        else {
+          const t = Math.min(1, h / 200);
+          r = 58 + t * 80; g = 92 + t * 50; b = 52 + t * 70;
+          if (I.surf[k] === 6) { r = 128; g = 122; b = 112; }
+        }
+        // sombreado del relieve (luz desde el noroeste)
+        const hl = I.heights[k - 1] ?? h, hu = I.heights[k - I.W] ?? h;
+        const sh = Math.max(-0.35, Math.min(0.35, ((h - hl) + (h - hu)) * 0.08));
+        d[k * 4] = r * (1 + sh); d[k * 4 + 1] = g * (1 + sh); d[k * 4 + 2] = b * (1 + sh); d[k * 4 + 3] = 255;
+      }
+    }
+    const tmp = document.createElement('canvas');
+    tmp.width = I.W; tmp.height = I.H;
+    tmp.getContext('2d').putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(tmp, ...this.toMap(ISLAND.minX, ISLAND.minZ), (I.W - 1) * ISLAND.cell + ISLAND.cell, (I.H - 1) * ISLAND.cell + ISLAND.cell);
+    // lago
+    ctx.fillStyle = '#3f9fb0';
+    ctx.beginPath();
+    ctx.arc(...this.toMap(I.lake.x, I.lake.z), I.lake.r, 0, Math.PI * 2);
+    ctx.fill();
+    // rutas
+    for (const [w, color] of [[12, '#40444a'], [9, '#6a6f76'], [1.5, 'rgba(255,214,102,0.7)']]) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = w;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      for (const r of I.roads) {
+        ctx.beginPath();
+        r.pts.forEach((p, i) => (i === 0 ? ctx.moveTo(...this.toMap(p.x, p.z)) : ctx.lineTo(...this.toMap(p.x, p.z))));
+        ctx.stroke();
+      }
+    }
+    // pueblo, rancho, observatorio: manchas de edificios
+    ctx.fillStyle = '#9a8f80';
+    for (const p of I.places) if (p.r > 0) {
+      ctx.beginPath();
+      ctx.arc(...this.toMap(p.x, p.z), Math.min(p.r, 30), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   // ---------------------------------------------------------------- minimapa
   drawMinimap(canvas, px, pz, camYaw, playerYaw, scale = 1.6) {
     const ctx = canvas.getContext('2d');
@@ -86,7 +143,10 @@ export class MapSystem {
     ctx.scale(scale, scale);
     const [mx, my] = this.toMap(px, pz);
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(this.base, -mx, -my);
+    const R0 = Math.ceil(Math.hypot(W, H) / scale / 2) + 4;
+    const sx0 = Math.max(0, Math.floor(mx - R0)), sy0 = Math.max(0, Math.floor(my - R0));
+    const sw = Math.min(this.base.width - sx0, R0 * 2), sh = Math.min(this.base.height - sy0, R0 * 2);
+    if (sw > 0 && sh > 0) ctx.drawImage(this.base, sx0, sy0, sw, sh, sx0 - mx, sy0 - my, sw, sh);
     // ruta del GPS
     if (this.route && this.route.length > 1) {
       ctx.strokeStyle = '#c77dff';
@@ -262,6 +322,8 @@ export class MapSystem {
     const items = Object.values(DISTRICTS).map((d) => `<div class="lg"><span class="sw" style="background:${d.color}"></span>${d.name}</div>`);
     items.push('<div class="lg"><span class="sw" style="background:#3f6a37"></span>Parques</div>');
     items.push('<div class="lg"><span class="sw" style="background:#b59d6e"></span>Playa</div>');
+    items.push('<div class="lg"><span class="sw" style="background:#8a8c78"></span>Montaña</div>');
+    items.push('<div class="lg"><span class="sw" style="background:#6a6f76"></span>Rutas</div>');
     items.push('<div class="lg"><span class="sw" style="background:#fff;border:2px solid #ff2f7d"></span>Tu posición</div>');
     return items.join('');
   }

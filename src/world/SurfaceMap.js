@@ -21,6 +21,8 @@ const CELL = 2, MIN_X = -620, MIN_Z = -620, W = 660, H = 620;
 export class SurfaceMap {
   constructor(layout) {
     this.grid = new Uint8Array(W * H);
+    this.island = layout.island || null;
+    this.ext = layout.roadExtent;
     const fill = (x0, z0, x1, z1, v) => {
       const i0 = Math.max(0, Math.floor((x0 - MIN_X) / CELL)), i1 = Math.min(W - 1, Math.ceil((x1 - MIN_X) / CELL) - 1);
       const j0 = Math.max(0, Math.floor((z0 - MIN_Z) / CELL)), j1 = Math.min(H - 1, Math.ceil((z1 - MIN_Z) / CELL) - 1);
@@ -38,6 +40,10 @@ export class SurfaceMap {
   }
 
   at(x, z) {
+    const E = this.ext;
+    if (this.island && !(x >= E.min && x <= E.max && z >= E.min && z <= E.max) && !(x > BEACH.x0 && Math.abs(z) <= E.max + 40)) {
+      return this.island.surfaceAt(x, z);
+    }
     const i = Math.floor((x - MIN_X) / CELL), j = Math.floor((z - MIN_Z) / CELL);
     if (i < 0 || j < 0 || i >= W || j >= H) return SURFACE.GRASS;
     return this.grid[j * W + i];

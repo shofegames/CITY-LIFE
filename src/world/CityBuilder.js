@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { MeshBuilder } from './MeshBuilder.js';
 import { buildPropGeometries, makeLightPoolTexture } from './Props.js';
+import { IslandBuilder } from './IslandBuilder.js';
+import { beachGround as islandBeach, SEA } from './Island.js';
 import { CURB, BEACH } from './CityLayout.js';
 import { createRng } from './rng.js';
 import { addFacadeSign, addPoleSign, addNeonTube, addFacadeWash } from './Neon.js';
@@ -70,6 +72,12 @@ export class CityBuilder {
     this.buildProps();
     yield 'Modelando la costa';
     this.buildOutskirts();
+    if (this.island) {
+      yield 'Levantando la isla';
+      this.islandBuilder = new IslandBuilder(this.island, this, this.materials, this.collision, this.quality);
+      this.islandBuilder.build();
+      this.root.add(this.islandBuilder.root);
+    }
     yield 'Optimizando geometría';
     this.finalize();
   }
@@ -274,6 +282,32 @@ export class CityBuilder {
         D.box(d.x0, d.y0, d.z0, d.x1, d.y1, d.z1, { side: 'metal', color: 0xa0a5aa });
         D.box(d.x0 + 0.3, d.y1, d.z0 + 0.3, d.x1 - 0.3, d.y1 + 0.15, d.z1 - 0.3, { side: 'metal', color: 0x5a5f64 });
         break;
+      case 'pyramid': {
+        // remate en punta (techo piramidal de vidrio o metal)
+        const a = [d.x0, d.y, d.z0], b = [d.x1, d.y, d.z0], c = [d.x1, d.y, d.z1], e = [d.x0, d.y, d.z1];
+        const top = [(d.x0 + d.x1) / 2, d.y + d.h, (d.z0 + d.z1) / 2];
+        const k = d.mat || 'metal', col = d.color ?? 0xb8c4cc;
+        B.tri(k, b, a, top, [0, 0, 1, 0, 0.5, 1], col);
+        B.tri(k, c, b, top, [0, 0, 1, 0, 0.5, 1], col);
+        B.tri(k, e, c, top, [0, 0, 1, 0, 0.5, 1], col);
+        B.tri(k, a, e, top, [0, 0, 1, 0, 0.5, 1], col);
+        break;
+      }
+      case 'spire': {
+        // aguja: cono angosto con luz roja arriba
+        const seg = 8;
+        for (let i = 0; i < seg; i++) {
+          const a0 = (i / seg) * Math.PI * 2, a1 = ((i + 1) / seg) * Math.PI * 2;
+          const p0 = [d.x + Math.cos(a0) * d.r, d.y, d.z + Math.sin(a0) * d.r], p1 = [d.x + Math.cos(a1) * d.r, d.y, d.z + Math.sin(a1) * d.r];
+          B.tri('metal', p1, p0, [d.x, d.y + d.h, d.z], [0, 0, 1, 0, 0.5, 1], 0xd0d5da);
+        }
+        B.box(d.x - 0.3, d.y + d.h - 0.3, d.z - 0.3, d.x + 0.3, d.y + d.h + 0.3, d.z + 0.3, { side: 'neonTube', color: 0xff2a2a });
+        break;
+      }
+      case 'crownBand':
+        // franja luminosa en la corona de las torres
+        B.box(d.x0 - 0.15, d.y, d.z0 - 0.15, d.x1 + 0.15, d.y + d.h, d.z1 + 0.15, { side: 'neonTube', top: null, color: d.color });
+        break;
       case 'antenna':
         D.box(d.x - 0.25, d.y, d.z - 0.25, d.x + 0.25, d.y + d.h, d.z + 0.25, { side: 'metal', color: 0x9ea3a8 });
         D.box(d.x - 0.35, d.y + d.h, d.z - 0.35, d.x + 0.35, d.y + d.h + 0.6, d.z + 0.35, { side: 'lampGlow', color: 0xff3b30 });
@@ -464,15 +498,25 @@ export class CityBuilder {
         this.chunkAt((ax + bx) / 2, (az + bz) / 2).ground.floor('grass', ax, az, bx, bz, 0, 0xc8d8b0);
       }
     };
-    grass(-far, -far, E.min, far); // oeste
-    grass(E.min, -far, BEACH.x0, E.min); // norte
-    grass(E.min, E.max, BEACH.x0, far); // sur
+    if (!this.island) {
+      grass(-far, -far, E.min, far); // oeste
+      grass(E.min, -far, BEACH.x0, E.min); // norte
+      grass(E.min, E.max, BEACH.x0, far); // sur
+    }
 
     // playa con pendiente hacia el mar
     const beachZ0 = -far, beachZ1 = far;
     const groundAt = beachGround;
     L.groundAt = (x, z) => groundAt(x);
-    this.collision.groundFn = (x, z) => (x > BEACH.x0 ? Math.max(groundAt(x), -0.6) : 0);
+    const I = this.island;
+    const ext = L.roadExtent;
+    this.collision.groundFn = I
+      ? (x, z) => {
+          if (x >= ext.min && x <= ext.max && z >= ext.min && z <= ext.max) return 0;
+          if (x > BEACH.x0 && Math.abs(z) <= ext.max + 40) return Math.max(groundAt(x), -0.6);
+          return Math.max(I.sample(x, z), -0.6);
+        }
+      : (x, z) => (x > BEACH.x0 ? Math.max(groundAt(x), -0.6) : 0);
     const steps = 16;
     for (let i = 0; i < steps; i++) {
       const xa = BEACH.x0 + ((BEACH.x1 - BEACH.x0) * i) / steps, xb = BEACH.x0 + ((BEACH.x1 - BEACH.x0) * (i + 1)) / steps;
@@ -493,24 +537,28 @@ export class CityBuilder {
       this.collision.addBox(bw.x0, -0.5, bw.z0, bw.x1, bw.y, bw.z1, 'ground');
     }
     // océano: turquesa en la orilla, azul profundo mar adentro
-    this.water = new THREE.Mesh(new THREE.PlaneGeometry(3000, 4000, 60, 1), this.materials.get('water'));
+    const OW = this.island ? 6000 : 3000, OD = this.island ? 6000 : 4000;
+    this.water = new THREE.Mesh(new THREE.PlaneGeometry(OW, OD, this.island ? 150 : 60, this.island ? 150 : 1), this.materials.get('water'));
     const uv = this.water.geometry.getAttribute('uv');
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (3000 / 16), uv.getY(i) * (4000 / 16));
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (OW / 16), uv.getY(i) * (OD / 16));
     const wp = this.water.geometry.getAttribute('position');
     const cols = new Float32Array(uv.count * 3);
     const shallow = new THREE.Color(0x7ff0e0), deep = new THREE.Color(0x2a6f9a), tmpc = new THREE.Color();
     for (let i = 0; i < wp.count; i++) {
-      const dist = wp.getX(i) + 1500; // metros desde la orilla
-      tmpc.copy(shallow).lerp(deep, Math.min(1, dist / 260));
+      // metros desde la orilla
+      const dist = this.island ? -this.island.coastDist(wp.getX(i) - 250, -wp.getY(i) - 250) - 40 : wp.getX(i) + 1500;
+      tmpc.copy(shallow).lerp(deep, Math.min(1, Math.max(0, dist / 260)));
       cols[i * 3] = tmpc.r; cols[i * 3 + 1] = tmpc.g; cols[i * 3 + 2] = tmpc.b;
     }
     this.water.geometry.setAttribute('color', new THREE.BufferAttribute(cols, 3));
     this.buildCoast();
     this.water.rotation.x = -Math.PI / 2;
-    this.water.position.set(BEACH.waterX + 1500, -0.35, 0);
+    if (this.island) this.water.position.set(-250, SEA, -250);
+    else this.water.position.set(BEACH.waterX + 1500, -0.35, 0);
     this.water.receiveShadow = false;
     this.root.add(this.water);
 
+    if (this.island) return; // la isla tiene terreno, montañas y bordes propios
     // colinas lejanas (horizonte)
     const hills = new MeshBuilder(this.materials);
     const hrng = createRng(555);
@@ -742,7 +790,8 @@ export class CityBuilder {
           ch.detailGroup.add(im);
           continue;
         }
-        const geos = this.props[type];
+        const far = type.endsWith('Far');
+        const geos = this.props[far ? type.slice(0, -3) : type];
         if (!geos) continue;
         const anyColor = list.some((it) => it.color);
         const white = new THREE.Color(1, 1, 1);
@@ -761,7 +810,7 @@ export class CityBuilder {
           im.computeBoundingSphere();
           im.castShadow = type !== 'hydrant' && type !== 'bin';
           im.receiveShadow = true;
-          ch.detailGroup.add(im);
+          (far ? ch.baseGroup : ch.detailGroup).add(im);
         }
       }
       // el neón no proyecta sombras y se dibuja después de lo opaco
@@ -827,6 +876,9 @@ export class CityBuilder {
 
 // Altura de la arena: baja suavemente desde el paseo hasta el mar.
 export function beachGround(x) {
+  return islandBeach(x);
+}
+function oldBeachGround(x) {
   if (x <= BEACH.x0) return 0;
   const t = Math.min(1, (x - BEACH.x0) / (BEACH.x1 - BEACH.x0));
   return 0.05 - t * 1.6;

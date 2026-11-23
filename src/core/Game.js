@@ -39,7 +39,7 @@ const HOSPITAL = { x: 208, z: -62, yaw: -Math.PI / 2, name: 'Hospital San Vega' 
 // ============================================================================
 
 const FIXED = 1 / 60;
-export const VERSION = '0.7.0';
+export const VERSION = '0.8.0';
 
 const WEATHER_ICONS = { clear: '☀', cloudy: '☁', rain: '☂', storm: '⚡' };
 
@@ -82,7 +82,7 @@ export class Game {
     }
     this.world = new World(this.renderer, this.settings);
     let i = 0;
-    const total = 11;
+    const total = 14;
     for (const label of this.world.loadSteps()) {
       this.ui.setLoading(Math.min(0.95, i++ / total), label + '...');
       await nextFrame();
@@ -821,6 +821,7 @@ export class Game {
       steps++;
     }
     if (steps === 6) this.acc = 0;
+    this.keepOnIsland(car);
     if (car) {
       // el jugador viaja con el auto
       this.player.position.copy(car.pos);
@@ -903,14 +904,45 @@ export class Game {
       this.districtTimer = 0.5;
       const d = this.world.districtAt(this.player.position.x, this.player.position.z);
       this.ui.showDistrict(d);
-      const busy = d ? { downtown: 1, commercial: 0.8, industrial: 0.6, coastal: 0.4, suburbs: 0.3, rich: 0.2 }[d.id] : 0.1;
-      this.audio.setAmbience(busy * (1 - this.world.night * 0.5) * (1 - weather.rain * 0.5), (d?.id === 'coastal' ? 1 : 0.3) + weather.rain * 0.5);
+      const busy = (d && { downtown: 1, commercial: 0.8, industrial: 0.6, coastal: 0.4, suburbs: 0.3, rich: 0.2, puerto: 0.15 }[d.id]) ?? 0.05;
+      const windy = d && ['coastal', 'puerto', 'faro', 'playaSur', 'monte'].includes(d.id) ? 1 : d?.island ? 0.6 : 0.3;
+      this.audio.setAmbience(busy * (1 - this.world.night * 0.5) * (1 - weather.rain * 0.5), windy + weather.rain * 0.5);
       this.audio.setRain(weather.rain, !!car);
     }
     this.autosaveTimer += dt;
     if (this.autosaveTimer > 60) {
       this.autosaveTimer = 0;
       this.saveGame(false);
+    }
+  }
+
+  // No se puede ir mar adentro: se empuja de vuelta hacia la costa.
+  keepOnIsland(car) {
+    const I = this.world.island;
+    if (!I) return;
+    const o = car ? car.pos : this.player.position;
+    const LIMIT = -45;
+    const s = I.coastDist(o.x, o.z);
+    if (s >= LIMIT) return;
+    const e = 2;
+    const gx = I.coastDist(o.x + e, o.z) - I.coastDist(o.x - e, o.z);
+    const gz = I.coastDist(o.x, o.z + e) - I.coastDist(o.x, o.z - e);
+    const l = Math.hypot(gx, gz) || 1;
+    const nx = gx / l, nz = gz / l;
+    const push = LIMIT - s;
+    o.x += nx * push;
+    o.z += nz * push;
+    if (car) {
+      const vn = car.vx * nx + car.vz * nz;
+      if (vn < 0) { car.vx -= vn * nx * 1.3; car.vz -= vn * nz * 1.3; }
+    } else {
+      const v = this.player.velocity;
+      const vn = v.x * nx + v.z * nz;
+      if (vn < 0) { v.x -= vn * nx; v.z -= vn * nz; }
+    }
+    if (!this._seaToast || performance.now() - this._seaToast > 6000) {
+      this._seaToast = performance.now();
+      this.ui.toast('El mar está muy profundo: no podés ir más lejos');
     }
   }
 

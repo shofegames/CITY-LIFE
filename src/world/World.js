@@ -5,6 +5,7 @@ import { MaterialLibrary } from './Materials.js';
 import { CityBuilder } from './CityBuilder.js';
 import { Sky } from './Sky.js';
 import { Weather } from './Weather.js';
+import { Island, ISLAND_REGIONS } from './Island.js';
 import { CollisionWorld } from '../physics/CollisionWorld.js';
 
 // ============================================================================
@@ -30,11 +31,16 @@ export class World {
     const preset = this.settings.preset;
     yield 'Diseñando San Vega';
     this.layout = buildCityLayout();
+    this.island = new Island(this.layout);
+    for (const step of this.island.generate()) yield step;
+    this.layout.island = this.island;
     yield 'Pintando texturas';
     const aniso = Math.min(preset.textureSize >= 512 ? 4 : 1, this.renderer.capabilities.getMaxAnisotropy());
     this.textures = new TextureFactory(preset.textureSize, aniso);
     this.materials = new MaterialLibrary(this.textures, preset.lighting);
     this.city = new CityBuilder(this.layout, this.materials, this.collision);
+    this.city.island = this.island;
+    this.city.quality = this.settings.get('quality');
     for (const step of this.city.buildSteps()) yield step;
     this.scene.add(this.city.root);
     yield 'Encendiendo el cielo';
@@ -70,7 +76,11 @@ export class World {
 
   districtAt(x, z) {
     const d = districtAt(this.layout, x, z);
-    return d ? { id: d, ...DISTRICTS[d] } : null;
+    if (d) return { id: d, ...DISTRICTS[d] };
+    const E = this.layout.roadExtent;
+    if (x >= E.min && x <= E.max + 130 && z >= E.min && z <= E.max) return null;
+    const r = this.island?.regionAt(x, z);
+    return r ? { id: r, island: true, ...ISLAND_REGIONS[r] } : null;
   }
 
   update(dt, camera, focus, groundY = 0) {
@@ -83,6 +93,7 @@ export class World {
     this.materials.setWet(w.wet);
     this.city.setNight(this.sky.night, w.wet);
     this.city.update(dt, this.clock);
+    this.city.islandBuilder?.update(dt, this.clock, this.sky.night, camera);
     // mapa de entorno (reflejos) regenerado cada media hora de juego o si cambia el clima
     if (this.useEnv && (Math.abs(this.timeOfDay - this.envHour) > 0.5 || Math.abs(w.cloud - this.envCloud) > 0.08)) this.regenerateEnv();
   }

@@ -93,5 +93,21 @@
       "La cabeza mira hacia donde apunta la cámara",
       "Saltos y caídas con poses nuevas; al aterrizar se agacha"
     ]
+  },
+  {
+    "version": "0.8.0",
+    "nombre": "Isla de San Vega",
+    "fecha": "2026-11-23",
+    "novedades": [
+      "San Vega ahora es una isla: playas en todo el contorno, cerros, montañas al noroeste, bosque y un lago",
+      "4 rutas nuevas que salen de la ciudad: Ruta del Monte, Ruta Costera Norte, Camino del Oeste y Ruta del Sur",
+      "Ruta de montaña con curvas y guardarraíles hasta el Observatorio Monte Vega",
+      "Lugares nuevos: Puerto Viejo (pueblo pescador con muelle y botes), Faro del Oeste (con luz giratoria de noche), Rancho Las Palmas, Mirador del Monte y Lago Azul",
+      "Las montañas se ven desde la ciudad y la ciudad se ve desde la montaña",
+      "Centro con edificios distintos: torres escalonadas, gemelas, en L, finas con basamento y con remate en punta",
+      "Torre Vega: el rascacielos más alto, con aguja",
+      "En las subidas el auto pierde velocidad y en las bajadas gana",
+      "Mapa y minimapa con el relieve de toda la isla y las rutas"
+    ]
   }
 ]

@@ -29,6 +29,7 @@ export class MaterialLibrary {
     d('plaza', { tex: T('plaza'), roughness: 0.85, wet: 0.85, wetRough: 0.3, puddles: true });
     d('concrete', { tex: T('concrete'), roughness: 0.9, wet: 0.75, wetRough: 0.4 });
     d('grass', { tex: T('grass'), roughness: 1, wet: 0.35, wetRough: 0.8 });
+    d('terrain', { tex: T('terrain'), roughness: 0.95, wet: 0.4, wetRough: 0.6, haze: true });
     d('sand', { tex: T('sand'), roughness: 1, wet: 0.45, wetRough: 0.75, nightGlow: 0x1a2030 });
     d('wood', { tex: T('wood'), roughness: 0.85, wet: 0.6, wetRough: 0.35, nightGlow: 0x1a1a22 });
     d('water', { tex: T('water'), roughness: 0.15, metalness: 0.1, color: 0xffffff, transparent: true, opacity: 0.92, nightGlow: 0x08305a });
@@ -99,6 +100,7 @@ export class MaterialLibrary {
       if (def.envBoost) m.envMapIntensity = 1.2;
     }
     if (def.puddles && m.isMeshStandardMaterial) addPuddles(m, this.wetUniform);
+    if (def.haze) addHaze(m);
     if (def.polygonOffset) {
       m.polygonOffset = true;
       m.polygonOffsetFactor = -2;
@@ -204,4 +206,38 @@ ${sh.vertexShader.replace(
     );
   };
   m.customProgramCacheKey = () => 'puddles';
+}
+
+// Bruma: el terreno lejano no desaparece en la niebla, se ve azulado y suave
+// (así se ven las montañas desde la ciudad). impostor: escala hacia la cámara.
+export function addHaze(m, impostor = null) {
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => {
+    if (prev && prev !== addHaze) prev(sh, r);
+    if (impostor) { sh.uniforms.uImpScale = impostor.scale; sh.uniforms.uImpMin = impostor.min; }
+    sh.vertexShader = (impostor ? 'uniform float uImpScale;\n' : '') + 'varying float vHazeDist;\n' + sh.vertexShader.replace(
+      '#include <project_vertex>',
+      impostor
+        ? `vec4 wPosH = modelMatrix * vec4(transformed, 1.0);
+          vHazeDist = length(wPosH.xyz - cameraPosition);
+          wPosH.xyz = cameraPosition + (wPosH.xyz - cameraPosition) * uImpScale;
+          vec4 mvPosition = viewMatrix * wPosH;
+          gl_Position = projectionMatrix * mvPosition;`
+        : `#include <project_vertex>
+          vHazeDist = length((modelMatrix * vec4(transformed, 1.0)).xyz - cameraPosition);`,
+    );
+    sh.fragmentShader = (impostor ? 'uniform float uImpMin;\n' : '') + 'varying float vHazeDist;\n' + sh.fragmentShader.replace(
+      '#include <clipping_planes_fragment>',
+      // cerca de la cámara se dibuja el terreno detallado: la versión liviana solo de lejos
+      impostor ? '#include <clipping_planes_fragment>\n if (vHazeDist < uImpMin) discard;' : '#include <clipping_planes_fragment>',
+    ).replace(
+      '#include <fog_fragment>',
+      `#ifdef USE_FOG
+        float fogStd = smoothstep(fogNear, fogFar, vHazeDist);
+        float hz = clamp(max(fogStd * 0.45, smoothstep(fogNear, fogFar * 5.0, vHazeDist) * 0.9), 0.0, 0.9);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, hz);
+      #endif`,
+    );
+  };
+  m.customProgramCacheKey = () => (impostor ? 'hazeImp' : 'haze');
 }
