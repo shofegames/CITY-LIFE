@@ -33,11 +33,11 @@ export function buildPropGeometries(materials) {
 
   // ---- árbol frondoso ----
   const rng = createRng(99);
-  mb.cylinder('bark', 0, 0, 0, 2.6, 0.22, 7, 0xffffff, false);
-  mb.cylinder('bark', 0, 0, 2.2, 3.4, 0.14, 6, 0xffffff, false);
+  mb.cylinder('bark', 0, 0, 0, 3.8, 0.2, 7, 0xffffff, false);
+  mb.cylinder('bark', 0, 0, 3.4, 4.8, 0.13, 6, 0xffffff, false);
   const blob = new THREE.IcosahedronGeometry(1, 1);
   const greens = [0x3f7d2b, 0x4c8a33, 0x356b25, 0x5a9440, 0x2f5f22];
-  const blobs = [[0, 4.2, 0, 2.1], [0.9, 3.7, 0.5, 1.5], [-0.8, 3.8, -0.4, 1.6], [0.2, 5.1, -0.3, 1.4], [-0.4, 3.6, 0.9, 1.3]];
+  const blobs = [[0, 5.9, 0, 2.0], [0.9, 5.3, 0.5, 1.45], [-0.8, 5.4, -0.4, 1.5], [0.2, 6.8, -0.3, 1.35], [-0.4, 5.2, 0.9, 1.25]];
   for (const [x, y, z, s] of blobs) {
     mtx.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(), new THREE.Vector3(s, s * 0.85, s));
     mb.addGeometry('foliage', blob, mtx, () => greens[Math.floor(rng.next() * greens.length)]);

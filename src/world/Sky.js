@@ -5,16 +5,16 @@ import * as THREE from 'three';
 // ============================================================================
 
 const KEYS = [
-  { h: 0, top: 0x04060f, hor: 0x111a30, sun: 0x8aa2ff, si: 0.22, amb: 0.32, gnd: 0x0b0d12 },
-  { h: 4.8, top: 0x070b1d, hor: 0x23243f, sun: 0x8aa2ff, si: 0.2, amb: 0.32, gnd: 0x0d0f15 },
+  { h: 0, top: 0x04060f, hor: 0x111a30, sun: 0x8aa2ff, si: 0.35, amb: 0.48, gnd: 0x0b0d12 },
+  { h: 4.8, top: 0x070b1d, hor: 0x23243f, sun: 0x8aa2ff, si: 0.32, amb: 0.46, gnd: 0x0d0f15 },
   { h: 6.0, top: 0x24406e, hor: 0xe99863, sun: 0xffa060, si: 0.9, amb: 0.55, gnd: 0x3a3028 },
   { h: 7.5, top: 0x447dc0, hor: 0xbcd3e6, sun: 0xffe4c0, si: 2.3, amb: 0.85, gnd: 0x5a5548 },
   { h: 12, top: 0x3a7ccd, hor: 0xc6dcf0, sun: 0xffffff, si: 3.0, amb: 1.0, gnd: 0x6a6458 },
   { h: 16.5, top: 0x4378bd, hor: 0xdcc8a8, sun: 0xffe2b5, si: 2.5, amb: 0.9, gnd: 0x625a4c },
   { h: 18.2, top: 0x2a3d70, hor: 0xff8448, sun: 0xff7a3a, si: 1.2, amb: 0.6, gnd: 0x4a3426 },
-  { h: 19.4, top: 0x0f1735, hor: 0x48304f, sun: 0x9aa8ff, si: 0.3, amb: 0.4, gnd: 0x16141a },
-  { h: 21, top: 0x04060f, hor: 0x111a30, sun: 0x8aa2ff, si: 0.22, amb: 0.32, gnd: 0x0b0d12 },
-  { h: 24, top: 0x04060f, hor: 0x111a30, sun: 0x8aa2ff, si: 0.22, amb: 0.32, gnd: 0x0b0d12 },
+  { h: 19.4, top: 0x0f1735, hor: 0x48304f, sun: 0x9aa8ff, si: 0.38, amb: 0.5, gnd: 0x16141a },
+  { h: 21, top: 0x04060f, hor: 0x111a30, sun: 0x8aa2ff, si: 0.35, amb: 0.48, gnd: 0x0b0d12 },
+  { h: 24, top: 0x04060f, hor: 0x111a30, sun: 0x8aa2ff, si: 0.35, amb: 0.48, gnd: 0x0b0d12 },
 ];
 
 const _a = new THREE.Color(), _b = new THREE.Color();
@@ -154,8 +154,10 @@ export class Sky {
     this.sun.color.copy(k.sun);
     this.sun.intensity = k.si;
 
-    this.fogColor.copy(k.hor).lerp(k.top, 0.25);
+    // niebla del mismo color que el horizonte: los edificios lejanos se funden con el cielo
+    this.fogColor.copy(k.hor);
     this.scene.fog.color.copy(this.fogColor);
+    this.uniforms.groundColor.value.copy(k.hor);
     this.scene.fog.near = drawDistance * 0.3;
     this.scene.fog.far = drawDistance * 0.97;
 
