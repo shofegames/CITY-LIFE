@@ -50,5 +50,18 @@
       "Concesionario de autos",
       "Propiedades con garaje, guardado y negocio con ganancias diarias"
     ]
+  },
+  {
+    "version": "0.5.0",
+    "nombre": "Ciudad tropical",
+    "fecha": "2026-11-23",
+    "novedades": [
+      "Carteles de neón en negocios, hoteles y azoteas que brillan de noche",
+      "Tubos de neón y luces de color en las fachadas de los hoteles",
+      "Edificios en colores pastel y palmeras en avenidas y veredas",
+      "Mar turquesa cerca de la orilla",
+      "Muelle de Costa Azul con rueda gigante iluminada",
+      "Playa con sombrillas, reposeras, guardavidas, casetas, vóley y chiringuito"
+    ]
   }
 ]

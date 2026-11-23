@@ -3,6 +3,7 @@ import { MeshBuilder } from './MeshBuilder.js';
 import { buildPropGeometries, makeLightPoolTexture } from './Props.js';
 import { CURB, BEACH } from './CityLayout.js';
 import { createRng } from './rng.js';
+import { addFacadeSign, addPoleSign, addNeonTube, addFacadeWash } from './Neon.js';
 
 // ============================================================================
 // Convierte el plano de San Vega en mallas 3D divididas en zonas ("chunks").
@@ -113,9 +114,10 @@ export class CityBuilder {
         const x0 = Math.min(ax, bx), x1 = Math.max(ax, bx), z0 = Math.min(az, bz), z1 = Math.max(az, bz);
         this.chunkAt(mx, mz).ground.box(x0, 0, z0, x1, CURB, z1, { side: 'concrete', top: 'grass' });
         this.collision.addBox(x0, 0, z0, x1, CURB, z1, 'ground');
-        for (let s = r.from + 12; s < r.to - 10; s += 18) {
+        // bulevar tropical: palmeras en el cantero central
+        for (let s = r.from + 12; s < r.to - 10; s += 16) {
           const [tx, tz] = P(s, 0);
-          this.addInstance('tree', tx, CURB, tz, s * 0.37, 0.8, null);
+          this.addInstance('palm', tx, CURB, tz, s * 0.37, 1.05, null);
           this.collision.addBox(tx - 0.25, 0, tz - 0.25, tx + 0.25, 3, tz + 0.25, 'prop');
         }
       } else if (spec.kind === 'highway') {
@@ -313,6 +315,44 @@ export class CityBuilder {
         D.facePanel('garageDoor', d.face, cx, cz, 3.2, CURB, 2.4, 0.05);
         break;
       }
+      // ---- neón ----
+      case 'sign': {
+        const { cx, cz } = faceCenter(d);
+        const len = d.face === 'n' || d.face === 's' ? d.x1 - d.x0 : d.z1 - d.z0;
+        const w = Math.min(d.w || 7, len * 0.7);
+        addFacadeSign(B, this.materials.neon, d.word, d.face, cx, cz, d.y, w, w / this.materials.neon.aspect * 1.25);
+        break;
+      }
+      case 'vsign':
+        addFacadeSign(B, this.materials.neon, d.word, d.face, d.x, d.z, d.y, 2.4, d.h, true);
+        break;
+      case 'roofSign': {
+        const w = Math.min(16, (d.face === 'n' || d.face === 's' ? d.x1 - d.x0 : d.z1 - d.z0) * 0.8);
+        const h = w / this.materials.neon.aspect * 1.25;
+        const { cx, cz } = faceCenter(d);
+        // estructura metálica sobre la azotea
+        const inset = 1.2;
+        const ix = d.face === 'e' ? -inset : d.face === 'w' ? inset : 0, iz = d.face === 's' ? -inset : d.face === 'n' ? inset : 0;
+        B.box(cx + ix - 0.15, d.y, cz + iz - 0.15, cx + ix + 0.15, d.y + 1.2, cz + iz + 0.15, { side: 'metal', color: 0x2b2f33 });
+        addFacadeSign(B, this.materials.neon, d.word, d.face, cx + ix, cz + iz, d.y + 1.2, w, h);
+        break;
+      }
+      case 'trim': {
+        const y = d.y + 1.05;
+        addNeonTube(B, d.x0, y, d.z0, d.x1, y, d.z0, d.color);
+        addNeonTube(B, d.x0, y, d.z1, d.x1, y, d.z1, d.color);
+        addNeonTube(B, d.x0, y, d.z0, d.x0, y, d.z1, d.color);
+        addNeonTube(B, d.x1, y, d.z0, d.x1, y, d.z1, d.color);
+        break;
+      }
+      case 'band':
+        addNeonTube(B, d.x1 + 0.3, d.y, d.z0, d.x1 + 0.3, d.y, d.z1, d.color, 0.09);
+        addNeonTube(B, d.x0, d.y, d.z0 - 0.3, d.x1, d.y, d.z0 - 0.3, d.color, 0.09);
+        addNeonTube(B, d.x0, d.y, d.z1 + 0.3, d.x1, d.y, d.z1 + 0.3, d.color, 0.09);
+        break;
+      case 'wash':
+        addFacadeWash(D, d.face, d.x0, d.z0, d.x1, d.z1, d.y, d.h, d.color);
+        break;
     }
   }
 
@@ -446,13 +486,20 @@ export class CityBuilder {
       }
       this.collision.addBox(bw.x0, -0.5, bw.z0, bw.x1, bw.y, bw.z1, 'ground');
     }
-    // océano
-    this.water = new THREE.Mesh(new THREE.PlaneGeometry(3000, 4000, 1, 1), this.materials.get('water'));
+    // océano: turquesa en la orilla, azul profundo mar adentro
+    this.water = new THREE.Mesh(new THREE.PlaneGeometry(3000, 4000, 60, 1), this.materials.get('water'));
     const uv = this.water.geometry.getAttribute('uv');
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (3000 / 16), uv.getY(i) * (4000 / 16));
-    // colores por vértice requeridos por el material
-    const cols = new Float32Array(uv.count * 3).fill(1);
+    const wp = this.water.geometry.getAttribute('position');
+    const cols = new Float32Array(uv.count * 3);
+    const shallow = new THREE.Color(0x7ff0e0), deep = new THREE.Color(0x2a6f9a), tmpc = new THREE.Color();
+    for (let i = 0; i < wp.count; i++) {
+      const dist = wp.getX(i) + 1500; // metros desde la orilla
+      tmpc.copy(shallow).lerp(deep, Math.min(1, dist / 260));
+      cols[i * 3] = tmpc.r; cols[i * 3 + 1] = tmpc.g; cols[i * 3 + 2] = tmpc.b;
+    }
     this.water.geometry.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    this.buildCoast();
     this.water.rotation.x = -Math.PI / 2;
     this.water.position.set(BEACH.waterX + 1500, -0.35, 0);
     this.water.receiveShadow = false;
@@ -481,6 +528,182 @@ export class CityBuilder {
     this.collision.addBox(B.maxX, -5, B.minZ - 5, B.maxX + 5, 60, B.maxZ + 5, 'bound');
     this.collision.addBox(B.minX - 5, -5, B.minZ - 5, B.maxX + 5, 60, B.minZ, 'bound');
     this.collision.addBox(B.minX - 5, -5, B.maxZ, B.maxX + 5, 60, B.maxZ + 5, 'bound');
+  }
+
+  // ------------------------------------------------------------------ costa
+  buildCoast() {
+    const L = this.L;
+    const col = this.collision;
+    const P = L.pier;
+    const det = (x, z) => this.chunkAt(x, z).detail;
+    const base = (x, z) => this.chunkAt(x, z).bld;
+    // ---- muelle ----
+    for (let x = P.x0; x < P.x1; x += 40) {
+      const x1 = Math.min(P.x1, x + 40);
+      base((x + x1) / 2, (P.z0 + P.z1) / 2).box(x, -0.6, P.z0, x1, P.deck, P.z1, { side: 'wood', top: 'wood' });
+    }
+    const pl = P.plat;
+    base((pl.x0 + pl.x1) / 2, (pl.z0 + pl.z1) / 2).box(pl.x0, -0.6, pl.z0, pl.x1, P.deck, pl.z1, { side: 'wood', top: 'plaza' });
+    col.addBox(P.x0, -0.6, P.z0, P.x1, P.deck, P.z1, 'ground');
+    col.addBox(pl.x0, -0.6, pl.z0, pl.x1, P.deck, pl.z1, 'ground');
+    // pilotes
+    for (let x = P.x0 + 6; x < P.x1; x += 12) {
+      for (const z of [P.z0 + 0.6, P.z1 - 0.6]) det(x, z).cylinder('wood', x, z, -3, -0.6, 0.35, 8, 0x8a6a4a, false);
+    }
+    // barandas (no se puede caer al agua)
+    const rail = (x0, z0, x1, z1) => {
+      det((x0 + x1) / 2, (z0 + z1) / 2).box(x0, P.deck, z0, x1, P.deck + 1.05, z1, { side: 'paint', color: 0xf2f2f2 });
+      col.addBox(x0, P.deck - 1, z0, x1, P.deck + 1.1, z1, 'wall');
+    };
+    const sx = BEACH.waterX - 4; // la baranda empieza sobre el agua
+    rail(sx, P.z0, pl.x0, P.z0 + 0.15);
+    rail(sx, P.z1 - 0.15, pl.x0, P.z1);
+    rail(pl.x0, pl.z0, pl.x1, pl.z0 + 0.15);
+    rail(pl.x0, pl.z1 - 0.15, pl.x1, pl.z1);
+    rail(pl.x1 - 0.15, pl.z0, pl.x1, pl.z1);
+    rail(pl.x0, pl.z0, pl.x0 + 0.15, P.z0);
+    rail(pl.x0, P.z1, pl.x0 + 0.15, pl.z1);
+    // muros invisibles en el mar (salvo la entrada al muelle)
+    col.addBox(BEACH.waterX + 12, -5, L.bounds.minZ - 5, BEACH.waterX + 16, 40, P.z0, 'bound');
+    col.addBox(BEACH.waterX + 12, -5, P.z1, BEACH.waterX + 16, 40, L.bounds.maxZ + 5, 'bound');
+    // kioscos sobre la plataforma
+    for (const [kx, kz, c] of [[674, -165, 0xff8fa3], [674, -135, 0xa0e7e5]]) {
+      base(kx, kz).box(kx - 2, P.deck, kz - 2, kx + 2, P.deck + 2.6, kz + 2, { side: 'paint', top: 'roofFlat', color: c });
+      base(kx, kz).box(kx - 2.4, P.deck + 2.6, kz - 2.4, kx + 2.4, P.deck + 2.9, kz + 2.4, { side: 'paint', color: 0xffffff });
+      col.addBox(kx - 2, 0, kz - 2, kx + 2, P.deck + 2.6, kz + 2, 'building');
+    }
+    this.buildFerrisWheel(P);
+
+    // ---- equipamiento de playa ----
+    const ground = (x) => beachGround(x);
+    const umbrella = new THREE.ConeGeometry(1.5, 0.55, 10, 1, true);
+    const m = new THREE.Matrix4();
+    for (const u of L.beachProps.umbrellas) {
+      const y = ground(u.x);
+      const D = det(u.x, u.z);
+      D.cylinder('metal', u.x, u.z, y, y + 2.3, 0.04, 6, 0xdddddd, false);
+      m.makeTranslation(u.x, y + 2.45, u.z);
+      D.addGeometry('paint', umbrella, m, (i) => (i % 2 ? u.color : 0xffffff));
+      // dos reposeras
+      const c = Math.cos(u.rot), s = Math.sin(u.rot);
+      for (const k of [-0.8, 0.8]) {
+        const lx = u.x + c * k + s * 1.4, lz = u.z - s * k + c * 1.4;
+        D.box(lx - 0.35, y + 0.25, lz - 0.9, lx + 0.35, y + 0.35, lz + 0.9, { side: 'paint', color: 0xf5f5f5 });
+        D.box(lx - 0.35, y + 0.35, lz - 0.95, lx + 0.35, y + 0.85, lz - 0.75, { side: 'paint', color: u.color });
+      }
+      col.addBox(u.x - 0.1, y, u.z - 0.1, u.x + 0.1, y + 2.3, u.z + 0.1, 'prop');
+    }
+    for (const t of L.beachProps.towers) {
+      const y = ground(t.x);
+      const D = det(t.x, t.z);
+      for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) D.box(t.x + dx * 1.1 - 0.08, y, t.z + dz * 1.1 - 0.08, t.x + dx * 1.1 + 0.08, y + 2.6, t.z + dz * 1.1 + 0.08, { side: 'paint', color: 0xffffff });
+      D.box(t.x - 1.4, y + 2.6, t.z - 1.4, t.x + 1.4, y + 4.4, t.z + 1.4, { side: 'paint', color: 0xe53935 });
+      D.box(t.x - 1.7, y + 4.4, t.z - 1.7, t.x + 1.7, y + 4.7, t.z + 1.7, { side: 'paint', color: 0xffffff });
+      col.addBox(t.x - 1.3, y, t.z - 1.3, t.x + 1.3, y + 4.7, t.z + 1.3, 'prop');
+    }
+    for (const h of L.beachProps.huts) {
+      const y = ground(h.x);
+      const B = base(h.x, h.z);
+      B.box(h.x - 2, y, h.z - 1.6, h.x + 2, y + 2.4, h.z + 1.6, { side: 'mansion', top: null, color: h.color, vOrigin: y });
+      B.gable('roofTile', h.x - 2.3, h.z - 1.9, h.x + 2.3, h.z + 1.9, y + 2.4, 1.1, false, 0xffffff, 'paint', h.color);
+      col.addBox(h.x - 2, y, h.z - 1.6, h.x + 2, y + 3.4, h.z + 1.6, 'building');
+    }
+    for (const n of L.beachProps.nets) {
+      const y = ground(n.x);
+      const D = det(n.x, n.z);
+      for (const dz of [-4.5, 4.5]) D.box(n.x - 0.05, y, n.z + dz - 0.05, n.x + 0.05, y + 2.5, n.z + dz + 0.05, { side: 'metal', color: 0xeeeeee });
+      D.box(n.x - 0.02, y + 1.6, n.z - 4.5, n.x + 0.02, y + 2.45, n.z + 4.5, { side: 'paint', color: 0x222222 });
+    }
+    // chiringuito
+    const ch = L.chiringuito;
+    if (ch) {
+      const y = ground(ch.x);
+      const B = base(ch.x, ch.z);
+      B.box(ch.x - 3, y, ch.z - 4, ch.x + 3, y + 1.1, ch.z + 4, { side: 'wood', top: 'wood' });
+      for (const [dx, dz] of [[-3, -4], [3, -4], [3, 4], [-3, 4]]) B.box(ch.x + dx - 0.12, y, ch.z + dz - 0.12, ch.x + dx + 0.12, y + 3.2, ch.z + dz + 0.12, { side: 'wood' });
+      m.makeTranslation(ch.x, y + 3.8, ch.z);
+      B.addGeometry('paint', new THREE.ConeGeometry(5.6, 1.6, 8), m, () => 0xd8b46a);
+      col.addBox(ch.x - 3, y, ch.z - 4, ch.x + 3, y + 1.1, ch.z + 4, 'building');
+    }
+    // carteles de neón sobre postes
+    for (const s of L.poleSigns) {
+      const by = s.base ?? CURB;
+      addPoleSign(det(s.x, s.z), this.materials.neon, s.word, s.x, s.z, s.rot, s.w, s.w / this.materials.neon.aspect * 1.25, 2.6, by);
+    }
+  }
+
+  // Rueda gigante del muelle: gira de día y se ilumina de noche.
+  buildFerrisWheel(P) {
+    const W = P.wheel;
+    const g = new THREE.Group();
+    g.position.set(W.x, P.deck, W.z);
+    const white = new THREE.MeshStandardMaterial({ color: 0xf4f4f4, roughness: 0.5, metalness: 0.4 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x3a3f45, roughness: 0.6, metalness: 0.5 });
+    // patas en A
+    for (const sz of [-1, 1]) {
+      for (const sx of [-1, 1]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.6, W.hub + 2, 0.6), white);
+        leg.position.set(sx * 5.5, W.hub / 2, sz * 3.2);
+        leg.rotation.z = sx * -0.22;
+        g.add(leg);
+      }
+    }
+    const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 7.5, 12).rotateX(Math.PI / 2), dark);
+    axle.position.y = W.hub;
+    g.add(axle);
+    const wheel = new THREE.Group();
+    wheel.position.y = W.hub;
+    for (const z of [-2.6, 2.6]) {
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(W.r, 0.28, 8, 64), white);
+      rim.position.z = z;
+      wheel.add(rim);
+    }
+    const N = 16;
+    this.ferrisCabins = [];
+    const cabinColors = [0xff2f7d, 0x2ff5ff, 0xffe14d, 0xb45cff, 0x4dff88, 0xff8a3d];
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      for (const z of [-2.6, 2.6]) {
+        const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.18, W.r, 0.18), white);
+        spoke.position.set(Math.cos(a) * W.r / 2, Math.sin(a) * W.r / 2, z);
+        spoke.rotation.z = a - Math.PI / 2;
+        wheel.add(spoke);
+      }
+      const cabin = new THREE.Group();
+      cabin.position.set(Math.cos(a) * W.r, Math.sin(a) * W.r, 0);
+      const box = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2, 2.6), new THREE.MeshStandardMaterial({ color: cabinColors[i % cabinColors.length], roughness: 0.5 }));
+      box.position.y = -1.4;
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.25, 2.9), white);
+      roof.position.y = -0.3;
+      cabin.add(box, roof);
+      wheel.add(cabin);
+      this.ferrisCabins.push(cabin);
+    }
+    // luces del aro (instanciadas)
+    const LN = 96;
+    this.ferrisLightMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+    const lights = new THREE.InstancedMesh(new THREE.SphereGeometry(0.22, 6, 4), this.ferrisLightMat, LN * 2);
+    const mm = new THREE.Matrix4(), cc = new THREE.Color();
+    let k = 0;
+    for (let i = 0; i < LN; i++) {
+      const a = (i / LN) * Math.PI * 2;
+      for (const z of [-2.9, 2.9]) {
+        mm.makeTranslation(Math.cos(a) * W.r, Math.sin(a) * W.r, z);
+        lights.setMatrixAt(k, mm);
+        lights.setColorAt(k, cc.setHSL((i / LN) * 3 % 1, 1, 0.6));
+        k++;
+      }
+    }
+    wheel.add(lights);
+    g.add(wheel);
+    g.rotation.y = 0; // el plano de la rueda mira hacia la ciudad (eje de giro = X)
+    wheel.rotation.order = 'YXZ';
+    g.rotation.y = Math.PI / 2;
+    g.traverse((o) => { if (o.isMesh && !o.isInstancedMesh) o.castShadow = true; });
+    this.ferris = { group: g, wheel };
+    this.root.add(g);
+    // patas a lo largo de Z (el plano de la rueda), separadas 3.2 m en X
+    this.collision.addBox(W.x - 4, 0, W.z - 7.5, W.x + 4, W.hub + 2, W.z + 7.5, 'building');
   }
 
   // ------------------------------------------------------------------ final
@@ -535,6 +758,16 @@ export class CityBuilder {
           ch.detailGroup.add(im);
         }
       }
+      // el neón no proyecta sombras y se dibuja después de lo opaco
+      for (const grp of [ch.baseGroup, ch.detailGroup]) {
+        for (const o of grp.children) {
+          if (o.material?.isMeshBasicMaterial && !o.isInstancedMesh) {
+            o.castShadow = false;
+            o.receiveShadow = false;
+            o.renderOrder = 3;
+          }
+        }
+      }
       ch.baseGroup.traverse((o) => { o.matrixAutoUpdate = false; o.updateMatrix(); });
       ch.detailGroup.traverse((o) => { o.matrixAutoUpdate = false; o.updateMatrix(); });
       this.root.add(ch.group);
@@ -556,9 +789,16 @@ export class CityBuilder {
 
   setNight(night) {
     if (this.lightPoolMat) this.lightPoolMat.opacity = Math.max(0, night - 0.15) * 0.75;
+    if (this.ferrisLightMat) this.ferrisLightMat.color.setScalar(0.35 + night * 1.6);
   }
 
   update(dt, time) {
+    if (this.ferris) {
+      const w = this.ferris.wheel;
+      w.rotation.z += dt * 0.06;
+      // las cabinas siempre quedan colgando hacia abajo
+      for (const c of this.ferrisCabins) c.rotation.z = -w.rotation.z;
+    }
     const wm = this.materials.get('water');
     if (wm.map) {
       wm.map.offset.x = (time * 0.006) % 1;

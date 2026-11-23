@@ -9,6 +9,10 @@ import { createRng, hashSeed } from './rng.js';
 
 export const GRID = { blocks: 10, pitch: 100, origin: -500 };
 export const SIDEWALK = 4;
+export const PIER = { x0: 519, x1: 668, z0: -156, z1: -144, deck: 0.75, plat: { x0: 668, x1: 716, z0: -172, z1: -128 }, wheel: { x: 700, z: -150, r: 20, hub: 23.5 } };
+const PASTEL = [0xffd1dc, 0xb5ead7, 0xc7ceea, 0xfff1b5, 0xffdac1, 0xa0e7e5, 0xf6f6f6, 0xe2c2ff, 0xffc6a8];
+const SHOP_WORDS = ['PIZZA', 'TACOS', 'CAFÉ', '24 HS', 'BAR', 'SUSHI', 'HELADOS', 'BURGER', 'FARMACIA', 'KARAOKE', 'DISCO', 'CLUB', 'SURF'];
+const NEON_HEX = [0xff2f7d, 0x2ff5ff, 0xb45cff, 0xffe14d, 0x4dff88, 0xff8a3d];
 export const CURB = 0.15; // altura de vereda / manzana
 export const BEACH = { x0: 512, x1: 640, waterX: 596 };
 
@@ -64,7 +68,9 @@ export function buildCityLayout() {
     surfaces: [], // pisos especiales dentro de manzanas (pasto, plaza, estacionamiento, piletas...)
     props: { lamps: [], trees: [], palms: [], trafficLights: [], benches: [], hydrants: [], bins: [], containers: [], walls: [], fountains: [], cars: [] },
     landmarks: [],
-    bounds: { minX: -560, maxX: BEACH.waterX + 18, minZ: -560, maxZ: 560 },
+    bounds: { minX: -560, maxX: 722, minZ: -560, maxZ: 560 },
+    beachProps: { umbrellas: [], towers: [], huts: [], nets: [] },
+    poleSigns: [],
   };
 
   // ---------- líneas de calles ----------
@@ -277,6 +283,9 @@ function addTower(L, lot, height, style, rng, margin) {
   bld.details.push({ type: 'canopy', x0: cx - w / 2, z0: cz - d / 2, x1: cx + w / 2, z1: cz + d / 2, y: CURB + 4.2 });
   addRoofDetails(bld, rng, height > 110);
   bld.footprint = { x0: cx - w / 2, z0: cz - d / 2, x1: cx + w / 2, z1: cz + d / 2 };
+  // neón en azoteas y bordes (skyline nocturno)
+  if (rng.chance(0.22)) bld.details.push({ type: 'roofSign', word: rng.pick(['VEGA', 'CASINO', 'SAN VEGA', 'COSTA AZUL', 'HOTEL']), face: rng.pick(['n', 's', 'e', 'w']), ...bld.top });
+  if (rng.chance(0.3)) bld.details.push({ type: 'trim', ...bld.top, color: rng.pick(NEON_HEX) });
   L.surfaces.push({ type: 'plaza', x0: lot.x0, z0: lot.z0, x1: lot.x1, z1: lot.z1 });
   L.buildings.push(bld);
 }
@@ -307,7 +316,7 @@ function addMidrise(L, lot, height, style, rng, face) {
   let cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2;
   if (face === 'n') cz = r.z0 + d / 2; else if (face === 's') cz = r.z1 - d / 2;
   else if (face === 'w') cx = r.x0 + w / 2; else cx = r.x1 - w / 2;
-  const tint = style === 'brick' ? rng.pick([0xffffff, 0xe8d6cc, 0xd9c0b0]) : rng.pick([0xf4efe6, 0xe9e1d0, 0xdfe7ee, 0xf2dccb, 0xe3ecd9, 0xf0e2b8, 0xd4d9e6]);
+  const tint = style === 'brick' ? rng.pick([0xffffff, 0xe8d6cc, 0xd9c0b0]) : rng.chance(0.55) ? rng.pick(PASTEL) : rng.pick([0xf4efe6, 0xe9e1d0, 0xdfe7ee, 0xf2dccb, 0xe3ecd9, 0xf0e2b8, 0xd4d9e6]);
   const bld = { style, kind: 'midrise', parts: [], details: [], height, tint, face, uOffset: rng.int(0, 3) };
   const shopH = 4.5;
   const x0 = cx - w / 2, x1 = cx + w / 2, z0 = cz - d / 2, z1 = cz + d / 2;
@@ -326,6 +335,9 @@ function addMidrise(L, lot, height, style, rng, face) {
   }
   addRoofDetails(bld, rng, false);
   bld.footprint = { x0, z0, x1, z1 };
+  // cartel de neón sobre el local de la planta baja
+  if (rng.chance(0.6)) bld.details.push({ type: 'sign', face, word: rng.pick(SHOP_WORDS), x0, z0, x1, z1, y: CURB + 4.6 });
+  if (rng.chance(0.25)) bld.details.push({ type: 'trim', ...bld.top, color: rng.pick(NEON_HEX) });
   L.buildings.push(bld);
 }
 
@@ -335,7 +347,7 @@ function addHotel(L, lot, height, rng) {
   const w = Math.floor(Math.min(r.x1 - r.x0, 30) / bay) * bay, d = Math.floor((r.z1 - r.z0) / bay) * bay;
   const cx = r.x1 - w / 2 - 2, cz = (r.z0 + r.z1) / 2; // hacia el mar (este)
   const x0 = cx - w / 2, x1 = cx + w / 2, z0 = cz - d / 2, z1 = cz + d / 2;
-  const bld = { style: 'hotel', kind: 'hotel', parts: [], details: [], height, tint: rng.pick([0xffffff, 0xfff4e0, 0xe8f6ff, 0xffe8e0]), face: 'e', uOffset: 0 };
+  const bld = { style: 'hotel', kind: 'hotel', parts: [], details: [], height, tint: rng.pick(PASTEL), face: 'e', uOffset: 0 };
   bld.parts.push({ x0, z0, x1, z1, y0: CURB, y1: CURB + 5, mat: 'lobby' });
   bld.parts.push({ x0, z0, x1, z1, y0: CURB + 5, y1: CURB + 5 + height, mat: 'hotel' });
   bld.top = { x0, z0, x1, z1, y: CURB + 5 + height };
@@ -344,7 +356,13 @@ function addHotel(L, lot, height, rng) {
   bld.details.push({ type: 'canopy', x0, z0, x1, z1, y: CURB + 4 });
   addRoofDetails(bld, rng, false);
   bld.footprint = { x0, z0, x1, z1 };
-  L.buildings.push(bld);
+  // estética de costa: cartel vertical "HOTEL", nombre, tubos de neón y luz de color en la fachada al mar
+  const neon = rng.pick(NEON_HEX);
+  bld.details.push({ type: 'vsign', face: 'e', word: 'HOTEL', x: x1, z: z0 + 2.2, y: CURB + 8, h: Math.min(12, height * 0.35) });
+  bld.details.push({ type: 'sign', face: 'e', word: rng.pick(['HOTEL SOL', 'HOTEL MAR', 'HOTEL CORAL', 'HOTEL BRISA', 'HOTEL ARENA']), x0, z0, x1, z1, y: CURB + 4.5, w: 9 });
+  bld.details.push({ type: 'trim', ...bld.top, color: neon });
+  bld.details.push({ type: 'band', x0, z0, x1, z1, y: CURB + 5, color: neon });
+  bld.details.push({ type: 'wash', face: 'e', x0, z0, x1, z1, y: CURB, h: Math.min(26, height * 0.6), color: rng.pick(NEON_HEX) });
   // jardín y palmeras delante del hotel
   L.surfaces.push({ type: 'plaza', x0: lot.x0, z0: lot.z0, x1: lot.x1, z1: lot.z1 });
   L.surfaces.push({ type: 'pool', x0: lot.x0 + 3, z0: cz - 5, x1: Math.min(x0 - 3, lot.x0 + 15), z1: cz + 5 });
@@ -594,8 +612,9 @@ function addStreetProps(L) {
           // no plantar sobre faroles
           if (Math.abs((t * n) % 1 - 0.5) < 0.18) continue;
           if (!greenStreet && rng.chance(0.4)) continue;
-          if (s.axis === 'x') L.props.trees.push({ x: s.x0 + t * len, z: s.z, s: rng.range(0.75, 1.05), street: true, palm: b.district === 'coastal' });
-          else L.props.trees.push({ x: s.x, z: s.z0 + t * len, s: rng.range(0.75, 1.05), street: true, palm: b.district === 'coastal' });
+          const palm = b.district === 'coastal' || ((b.district === 'commercial' || b.district === 'downtown') && rng.chance(0.45));
+          if (s.axis === 'x') L.props.trees.push({ x: s.x0 + t * len, z: s.z, s: rng.range(0.75, 1.05), street: true, palm });
+          else L.props.trees.push({ x: s.x, z: s.z0 + t * len, s: rng.range(0.75, 1.05), street: true, palm });
         }
       }
       if (b.district === 'downtown' || b.district === 'commercial') {
@@ -629,12 +648,44 @@ function addBeach(L) {
   L.beach = { ...BEACH, z0: L.roadExtent.min - 40, z1: L.roadExtent.max + 40 };
   // paseo costero de madera
   L.surfaces.push({ type: 'boardwalk', x0: BEACH.x0, x1: BEACH.x0 + 7, z0: L.roadExtent.min, z1: L.roadExtent.max, y: 0.35 });
+  const nearPier = (z, m = 10) => z > PIER.z0 - m && z < PIER.z1 + m;
   for (let z = L.roadExtent.min + 10; z < L.roadExtent.max - 10; z += 22) {
-    L.props.palms.push({ x: BEACH.x0 + 12 + rng.range(0, 10), z: z + rng.range(-5, 5), s: rng.range(0.9, 1.3), beach: true });
-    if (rng.chance(0.5)) L.props.benches.push({ x: BEACH.x0 + 6.2, z: z + 8, rot: -Math.PI / 2, y: 0.35 });
+    const pz = z + rng.range(-5, 5);
+    if (!nearPier(pz)) L.props.palms.push({ x: BEACH.x0 + 12 + rng.range(0, 10), z: pz, s: rng.range(0.9, 1.3), beach: true });
+    if (rng.chance(0.5) && !nearPier(z + 8, 3)) L.props.benches.push({ x: BEACH.x0 + 6.2, z: z + 8, rot: -Math.PI / 2, y: 0.35 });
   }
-  for (let z = L.roadExtent.min + 20; z < L.roadExtent.max; z += 50) L.props.lamps.push({ x: BEACH.x0 + 6.6, z, rot: -Math.PI / 2, y: 0.35 });
+  for (let z = L.roadExtent.min + 20; z < L.roadExtent.max; z += 50) if (!nearPier(z, 3)) L.props.lamps.push({ x: BEACH.x0 + 6.6, z, rot: -Math.PI / 2, y: 0.35 });
+  // equipamiento de playa: sombrillas con reposeras, guardavidas, casetas y vóley
+  const B = L.beachProps;
+  const umbrellaColors = [0xff2f7d, 0x2ff5ff, 0xffe14d, 0xff8a3d, 0xb45cff, 0x4dff88, 0xffffff];
+  for (let z = L.roadExtent.min + 15; z < L.roadExtent.max - 15; z += 9) {
+    for (let x = 532; x < 584; x += 11) {
+      if (nearPier(z, 8) || !rng.chance(0.42)) continue;
+      B.umbrellas.push({ x: x + rng.range(-2, 2), z: z + rng.range(-2, 2), color: rng.pick(umbrellaColors), rot: rng.range(0, Math.PI * 2) });
+    }
+  }
+  for (let z = L.roadExtent.min + 60; z < L.roadExtent.max; z += 140) if (!nearPier(z, 15)) B.towers.push({ x: 566, z });
+  for (let z = L.roadExtent.min + 35; z < L.roadExtent.max; z += 75) if (!nearPier(z, 12)) B.huts.push({ x: 524, z, color: rng.pick(PASTEL) });
+  B.nets.push({ x: 560, z: 70 }, { x: 560, z: -300 });
+  L.chiringuito = { x: 530, z: -62 };
+  L.poleSigns.push({ word: 'CHIRINGUITO', x: 523.5, z: -62, rot: -Math.PI / 2, w: 6, base: 0.35 });
+  // muelle con rueda gigante
+  L.pier = PIER;
+  L.poleSigns.push({ word: 'RUEDA', x: 521.5, z: PIER.z0 - 2.5, rot: -Math.PI / 2, w: 4, base: 0.35 });
+  for (let x = PIER.x0 + 12; x < PIER.x1; x += 22) {
+    L.props.lamps.push({ x, z: PIER.z0 + 0.6, rot: Math.PI, y: PIER.deck });
+    L.props.lamps.push({ x, z: PIER.z1 - 0.6, rot: 0, y: PIER.deck });
+  }
   L.landmarks.push({ name: 'Playa Costa Azul', x: BEACH.x0 + 40, z: 0, type: 'beach' });
+  L.landmarks.push({ name: 'Muelle y Rueda de Costa Azul', x: 640, z: PIER.z0 - 14, type: 'pier' });
+  // carteles de los lugares importantes
+  L.poleSigns.push(
+    { word: 'TALLER DUARTE', x: -109.5, z: 58, rot: Math.PI / 2, w: 6 },
+    { word: 'MODA VEGA', x: -76, z: -309.5, rot: 0, w: 5 },
+    { word: 'SURF & SOL', x: 409.5, z: 127, rot: -Math.PI / 2, w: 5 },
+    { word: 'CONCESIONARIO', x: 345, z: 309.5, rot: Math.PI, w: 7 },
+    { word: 'LA OLA', x: 409.5, z: 328, rot: -Math.PI / 2, w: 4 },
+  );
 }
 
 // Distrito de un punto del mundo (para HUD y minimapa).

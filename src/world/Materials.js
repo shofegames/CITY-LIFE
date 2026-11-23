@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildNeonAtlas, buildWashTexture } from './Neon.js';
 
 // ============================================================================
 // Biblioteca de materiales. Cada material se define una vez y puede recrearse
@@ -56,10 +57,26 @@ export class MaterialLibrary {
     d('bark', { color: 0x6b4b33, roughness: 1 });
     d('lampGlow', { color: 0xfff1cc, emissive: 0xffe2a8, emissiveIntensity: 0, roughness: 0.4, lamp: true });
     d('signal', { color: 0x222222, roughness: 0.5 });
+    // neón (sin iluminación: brillan por sí mismos)
+    this.neon = buildNeonAtlas(this.textures.size >= 512 ? 1024 : 512);
+    d('neon', { basic: true, map: this.neon.tex, additive: true, neon: true });
+    d('neonTube', { basic: true, neonTube: true });
+    d('wash', { basic: true, map: buildWashTexture(), additive: true, wash: true });
   }
 
   build(key) {
     const def = this.defs.get(key);
+    if (def.basic) {
+      const m = new THREE.MeshBasicMaterial({
+        map: def.map || null, vertexColors: true, toneMapped: false,
+        transparent: !!def.additive, depthWrite: !def.additive,
+        blending: def.additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+        side: def.additive ? THREE.DoubleSide : THREE.FrontSide,
+      });
+      m.name = key;
+      m.userData.def = def;
+      return m;
+    }
     const params = {
       color: def.color ?? 0xffffff,
       vertexColors: true,
@@ -106,6 +123,7 @@ export class MaterialLibrary {
     this.lighting = lighting;
     const replace = new Map();
     for (const [key, old] of this.mats) {
+      if (old.isMeshBasicMaterial) continue; // el neón no depende de la iluminación
       const m = this.build(key);
       m.emissiveIntensity = old.emissiveIntensity;
       replace.set(old, m);
@@ -123,6 +141,9 @@ export class MaterialLibrary {
       const def = m.userData.def;
       if (def.night) m.emissiveIntensity = Math.max(def.nightMin ?? 0, night) * 1.15;
       else if (def.lamp) m.emissiveIntensity = night * 2.2;
+      else if (def.neon) m.color.setScalar(0.22 + night * 1.25);
+      else if (def.neonTube) m.color.setScalar(0.3 + night * 1.7);
+      else if (def.wash) m.opacity = night * 0.6;
     }
   }
 }

@@ -34,7 +34,7 @@ const HOSPITAL = { x: 208, z: -62, yaw: -Math.PI / 2, name: 'Hospital San Vega' 
 // ============================================================================
 
 const FIXED = 1 / 60;
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.0';
 
 export class Game {
   constructor(canvas) {
