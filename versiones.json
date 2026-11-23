@@ -1,0 +1,41 @@
+[
+  {
+    "version": "0.1.0",
+    "nombre": "Ciudad y personaje",
+    "commit": "a13e770",
+    "fecha": "2026-11-22",
+    "novedades": [
+      "Ciudad de San Vega con 6 barrios, playa y mar",
+      "Ciclo de día y noche con ventanas y faroles encendidos",
+      "Personaje con animaciones: caminar, correr, sprint y saltar",
+      "Cámara en tercera persona con colisiones",
+      "Menú, configuración gráfica, minimapa, mapa y tutorial",
+      "Guardado local"
+    ]
+  },
+  {
+    "version": "0.2.0",
+    "nombre": "Autos y tráfico",
+    "commit": "15176c6",
+    "fecha": "2026-11-22",
+    "novedades": [
+      "8 autos con física de manejo propia",
+      "Subir, bajar y robar autos",
+      "Choques con daño y abolladuras",
+      "Tráfico con IA y semáforos",
+      "Sonido de motor, bocina y choques"
+    ]
+  },
+  {
+    "version": "0.3.0",
+    "nombre": "Misiones y policía",
+    "fecha": "2026-11-22",
+    "novedades": [
+      "Dos protagonistas: Nico y Lara (cambiás con Q)",
+      "Historia con 7 misiones",
+      "Policía con estrellas, persecuciones, bloqueos y helicóptero",
+      "GPS con ruta en el minimapa",
+      "Arrestos en la comisaría y hospital"
+    ]
+  }
+]

@@ -2,3 +2,5 @@
 .claude/worktrees/
 node_modules/
 dist/
+versiones/
+.snapshot-tmp/

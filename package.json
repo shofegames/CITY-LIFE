@@ -1,18 +1,20 @@
 {
   "name": "city-life",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "CITY LIFE — juego 3D de mundo abierto en navegador. SHOFE GAMES.",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "guardar-version": "node scripts/guardar-version.mjs"
   },
   "dependencies": {
     "three": "^0.170.0"
   },
   "devDependencies": {
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vite-plugin-singlefile": "^2.3.2"
   }
 }
