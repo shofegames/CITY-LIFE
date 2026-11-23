@@ -87,6 +87,7 @@ export class UI {
       case 'settings': return this.showScreen('settings', true);
       case 'how-to-play': return this.showScreen('help', true);
       case 'credits': return this.showScreen('credits', true);
+      case 'close-shop': return g.closeShop();
       case 'back': {
         if (this.current === 'map' && this.stack.length === 0) return g.closeMap();
         if (!this.back()) g.resume();
@@ -160,6 +161,7 @@ export class UI {
       row(this.keysFor('handbrake'), 'Freno de mano'),
       row(this.keysFor('horn'), 'Bocina'),
       row(this.keysFor('camera'), 'Cambiar cámara'),
+      row(this.keysFor('radio'), 'Cambiar emisora de radio'),
       row(this.keysFor('vehicle'), 'Salir del vehículo'),
       row('<kbd>Esc</kbd>', 'Pausa'),
     ].join('');

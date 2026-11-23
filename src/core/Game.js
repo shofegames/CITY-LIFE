@@ -20,6 +20,9 @@ import { PoliceSystem } from '../police/PoliceSystem.js';
 import { MissionSystem } from '../missions/MissionSystem.js';
 import { buildStory } from '../missions/story.js';
 import { ProtagonistSystem, PROTAGONISTS, LARA_START } from '../player/Protagonists.js';
+import { PedSystem } from '../npc/PedSystem.js';
+import { Radio, STATIONS } from '../audio/Radio.js';
+import { Economy } from '../economy/Economy.js';
 
 // Lugares de reaparición
 const POLICE_STATION = { x: -92, z: 140, yaw: Math.PI / 2, name: 'Comisaría Central' };
@@ -31,7 +34,7 @@ const HOSPITAL = { x: 208, z: -62, yaw: -Math.PI / 2, name: 'Hospital San Vega' 
 // ============================================================================
 
 const FIXED = 1 / 60;
-export const VERSION = '0.3.0';
+export const VERSION = '0.4.0';
 
 export class Game {
   constructor(canvas) {
@@ -95,6 +98,10 @@ export class Game {
     this.story = buildStory();
     this.missions = new MissionSystem(this, this.story);
     this.gps = { target: null, timer: 0, last: null };
+    this.peds = new PedSystem(this);
+    this.radio = new Radio(this.audio);
+    this.radioIndex = Math.floor(Math.random() * STATIONS.length);
+    this.economy = new Economy(this);
     layout.landmarks.push(
       { name: POLICE_STATION.name, x: POLICE_STATION.x, z: POLICE_STATION.z, type: 'police' },
       { name: HOSPITAL.name, x: HOSPITAL.x, z: HOSPITAL.z, type: 'hospital' },
@@ -302,8 +309,14 @@ export class Game {
     st.characters = st.characters || {};
     st.characters.nico = st.characters.nico || { ...st.player, health: st.health ?? 100 };
     st.characters.lara = st.characters.lara || { ...LARA_START };
+    st.properties = st.properties || [];
+    st.garages = st.garages || {};
     this.protagonist.current = st.current;
+    for (const id of ['nico', 'lara']) this.protagonist.setLook(id, st.characters[id].look || {});
     this.player.setModel(this.protagonist.model(st.current));
+    this.peds.clear();
+    this.economy.refreshMarkers();
+    this.economy.prevHour = null;
     this.ui.setCharacter(PROTAGONISTS[st.current]);
     const p = st.characters[st.current];
     this.player.spawn(p.x, p.y, p.z, p.yaw);
@@ -328,6 +341,7 @@ export class Game {
     this.ui.showClickToPlay(false);
     this.ui.showScreen('pause');
     this.audio.stopEngine();
+    this.radio.stop();
   }
 
   resume() {
@@ -337,7 +351,21 @@ export class Game {
     this.input.context = this.playerVehicle ? 'vehicle' : 'foot';
     this.input.requestLock();
     this.canvas.focus();
-    if (this.playerVehicle) this.audio.startEngine();
+    if (this.playerVehicle) {
+      this.audio.startEngine();
+      if (this.radioIndex >= 0 && this.radio.index < 0 && this.playerVehicle.kind !== 'police') this.radio.play(this.radioIndex);
+    }
+  }
+
+  cycleRadio() {
+    // emisoras en orden y después "apagada"
+    this.radioIndex = this.radioIndex + 1 >= STATIONS.length ? -1 : this.radioIndex + 1;
+    this.radio.stop();
+    if (this.radioIndex >= 0) {
+      this.radio.play(this.radioIndex);
+      const s = STATIONS[this.radioIndex];
+      this.ui.toast(`Radio: ${s.name} · ${s.genre}`);
+    } else this.ui.toast('Radio apagada');
   }
 
   // ------------------------------------------------------------------ protagonistas
@@ -366,6 +394,65 @@ export class Game {
     this.ui.fade(false);
     this.ui.bigMessage(PROTAGONISTS[next].name.toUpperCase(), PROTAGONISTS[next].bio, 'pass', 3);
     this.switching = false;
+  }
+
+  // Cambiar ropa / apariencia de un protagonista
+  setLook(id, look) {
+    const model = this.protagonist.setLook(id, look);
+    this.gameState.characters[id] = { ...(this.gameState.characters[id] || {}), look: { ...look } };
+    if (id === this.protagonist.current) {
+      this.player.setModel(model);
+      this.player.root.visible = !this.playerVehicle;
+    }
+  }
+
+  // ------------------------------------------------------------------ tiendas
+  openShop(opts) {
+    if (this.state !== 'playing') return;
+    this.shop = opts;
+    this.state = 'shop';
+    this.input.setGameActive(false);
+    this.input.releaseLock();
+    this.ui.setPrompt(null);
+    this.audio.stopEngine();
+    const cam = this.camera;
+    if (opts.camera === 'car' && this.playerVehicle) {
+      const v = this.playerVehicle, f = v.forward, l = v.left;
+      cam.position.set(v.pos.x + f.x * 5 + l.x * 4, v.pos.y + 2.4, v.pos.z + f.z * 5 + l.z * 4);
+      cam.lookAt(v.pos.x - l.x * 1.5, v.pos.y + 0.6, v.pos.z - l.z * 1.5);
+    } else {
+      const p = this.player.position, y = this.player.yaw;
+      const fx = Math.sin(y), fz = Math.cos(y);
+      cam.position.set(p.x + fx * 2.6 - fz * 0.9, p.y + 1.45, p.z + fz * 2.6 + fx * 0.9);
+      cam.lookAt(p.x - fz * 0.75, p.y + 1.05, p.z + fx * 0.75);
+    }
+    cam.fov = 50;
+    cam.updateProjectionMatrix();
+    this.renderShop();
+    this.ui.showScreen('shop');
+  }
+
+  renderShop() {
+    const s = this.shop;
+    if (!s) return;
+    document.getElementById('shop-kind').textContent = s.kind;
+    document.getElementById('shop-title').textContent = s.title;
+    document.getElementById('shop-sub').textContent = s.sub || '';
+    const body = document.getElementById('shop-body');
+    body.innerHTML = s.render();
+    document.getElementById('shop-money').textContent = `$${this.gameState.money.toLocaleString('es-AR')}`;
+    body.onclick = async (e) => {
+      const el = e.target.closest('button');
+      if (!el) return;
+      const changed = await s.onClick(el);
+      if (changed && this.shop === s) this.renderShop();
+    };
+  }
+
+  closeShop() {
+    if (this.state !== 'shop') return;
+    this.shop = null;
+    this.resume();
   }
 
   teleportPlayer(x, z, yaw) {
@@ -448,6 +535,11 @@ export class Game {
     this.input.context = 'vehicle';
     this.cameraSystem.enterVehicle(v);
     this.audio.startEngine();
+    if (this.radioIndex >= 0) {
+      this.radio.play(this.radioIndex);
+      const s = STATIONS[this.radioIndex];
+      this.ui.toast(`Radio: ${s.name} · ${s.genre} (${this.keyLabel('radio')} para cambiar)`);
+    }
     this.ui.setPrompt(null);
     this.ui.showVehicleHUD(true, v);
     this.ui.tutorialProgress('car', 1);
@@ -497,6 +589,7 @@ export class Game {
     this.cameraSystem.exitVehicle(this.player.yaw);
     this.cameraSystem.snapTo(this.player.position, this.player.yaw + Math.PI);
     this.audio.stopEngine();
+    this.radio.stop();
     this.ui.showVehicleHUD(false);
     this.vehicles.updateHeadlight(null, 0);
   }
@@ -523,6 +616,7 @@ export class Game {
     if (this.ui.dialogOpen) return this.ui.closeDialog(false);
     if (this.state === 'playing') return this.pause();
     if (this.state === 'map') return this.closeMap();
+    if (this.state === 'shop') return this.closeShop();
     if (this.state === 'paused') {
       // ignorar el mismo Esc que liberó el mouse
       if (performance.now() - this.lastPauseAt < 350) return;
@@ -545,7 +639,7 @@ export class Game {
     st.health = p.health;
     st.current = this.protagonist.current;
     st.characters = st.characters || {};
-    st.characters[st.current] = { ...st.player, health: p.health };
+    st.characters[st.current] = { ...(st.characters[st.current] || {}), ...st.player, health: p.health };
     st.timeOfDay = this.world.timeOfDay;
     st.stats.distanceWalked = (st.stats.distanceWalked || 0);
     return st;
@@ -553,7 +647,9 @@ export class Game {
 
   saveGame(manual) {
     if (!this.gameState) return;
-    const ok = this.saves.save(this.collectState());
+    // los autos propios que están en la calle se guardan como si estuvieran en su garaje
+    const data = { ...this.collectState(), garages: this.economy.garagesForSave() };
+    const ok = this.saves.save(data);
     if (manual) this.ui.toast(ok ? 'Partida guardada' : 'No se pudo guardar');
   }
 
@@ -582,6 +678,7 @@ export class Game {
     this.measure(dt);
 
     if (this.state === 'playing') this.updatePlaying(dt);
+    else if (this.state === 'shop' && !this.playerVehicle) this.player.update(dt);
     else if (this.state === 'menu') {
       this.cameraSystem.updateMenu(dt);
       this.world.timeOfDay = 18.3 + Math.sin(now * 0.00003) * 0.6;
@@ -609,6 +706,7 @@ export class Game {
     }
     if (input.wasPressed('map')) return this.openMap();
     if (input.wasPressed('switchChar')) this.switchCharacter();
+    if (pv && input.wasPressed('radio')) this.cycleRadio();
     if (input.wasPressed('camera')) {
       if (pv) this.cameraSystem.cycleVehicleView();
       else this.cameraSystem.cyclePreset();
@@ -635,6 +733,7 @@ export class Game {
     const carBefore = car ? car.pos.clone() : null;
     this.acc += dt;
     let steps = 0;
+    const pedsOnRoad = this.peds.onRoad();
     while (this.acc >= FIXED && steps < 6) {
       if (!car) {
         this.player.fixedUpdate(FIXED, this.cameraSystem.yaw);
@@ -648,7 +747,7 @@ export class Game {
       this.police.fixedUpdate(FIXED);
       this.missions.fixedUpdate(FIXED);
       this.vehicles.fixedUpdate(FIXED);
-      this.traffic.fixedUpdate(FIXED, this.player.position, car, !car);
+      this.traffic.fixedUpdate(FIXED, this.player.position, car, !car, pedsOnRoad);
       this.acc -= FIXED;
       steps++;
     }
@@ -675,9 +774,14 @@ export class Game {
     this.particles.update(dt, this.renderer.domElement.height, this.camera.fov);
     this.police.update(dt);
     this.missions.update(dt);
+    if (!this.missions.prompt) this.economy.update(dt);
+    else this.economy.prompt = null;
+    if (this.state !== 'playing') return; // se abrió una tienda o un diálogo
+    this.peds.update(dt, focus, this.camera);
+    this.audio.listener = this.camera.position;
     this.markers.update(dt);
     this.updateGps(dt);
-    this.map.markers = [...this.missions.blips(), ...this.police.blips()];
+    this.map.markers = [...this.economy.blips(), ...this.missions.blips(), ...this.police.blips()];
     this.map.search = this.police.searching ? { x: this.police.lastSeen.x, z: this.police.lastSeen.z, r: 30 + this.police.wanted * 15 } : null;
 
     if (car) {
@@ -688,12 +792,20 @@ export class Game {
     } else {
       this.cameraSystem.update(dt, this.player.root.position, { sprint: this.player.sprinting, run: input.isDown('sprint') && this.player.speed > 3 });
       if (this.missions.prompt) this.ui.setPrompt(this.missions.prompt);
+      else if (this.economy.prompt) this.ui.setPrompt(this.economy.prompt);
       else if (nearCar) {
         const verb = nearCar.driver === 'ai' ? 'Robar' : 'Subir al';
         this.ui.setPrompt(`<kbd>${this.keyLabel('vehicle')}</kbd> ${verb} ${nearCar.T.name} <span class="muted">· ${nearCar.T.category}</span>`);
+      } else if (this.peds.nearestTalkable(this.player.position)) {
+        this.ui.setPrompt(`<kbd>${this.keyLabel('interact')}</kbd> Hablar`);
+        if (input.wasPressed('interact')) {
+          const line = this.peds.tryTalk(this.player.position);
+          if (line) this.missions.say('Vecino de San Vega', line, 3.5);
+        }
       } else this.ui.setPrompt(null);
     }
     if (car && this.missions.prompt && this.missions.retry) this.ui.setPrompt(this.missions.prompt);
+    else if (car && this.economy.prompt) this.ui.setPrompt(this.economy.prompt);
     this.gameState.playTime += dt;
 
     if (this.player.health <= 0) this.respawn();

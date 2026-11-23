@@ -37,5 +37,18 @@
       "GPS con ruta en el minimapa",
       "Arrestos en la comisaría y hospital"
     ]
+  },
+  {
+    "version": "0.4.0",
+    "nombre": "Vida en la calle",
+    "fecha": "2026-11-23",
+    "novedades": [
+      "Peatones que caminan, cruzan con el semáforo, se asustan, pueden ser atropellados y hablan",
+      "Radio en los autos con 4 emisoras de música original (tecla R)",
+      "Tiendas de ropa para vestir a Nico y Lara",
+      "Taller para reparar y pintar autos (pintar hace perder a la policía)",
+      "Concesionario de autos",
+      "Propiedades con garaje, guardado y negocio con ganancias diarias"
+    ]
   }
 ]

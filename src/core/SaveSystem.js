@@ -20,6 +20,7 @@ export function newGameState(spawn = { x: 0, y: 0.15, z: 0, yaw: 0 }) {
     characters: { nico: { ...spawn, health: 100 }, lara: { x: -308, y: 0.15, z: -330, yaw: 0, health: 100 } },
     completedMissions: [],
     ownedVehicles: [],
+    properties: [],
     garages: {},
     stats: { distanceWalked: 0, jumps: 0 },
   };

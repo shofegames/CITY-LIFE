@@ -17,6 +17,7 @@ export class AudioSystem {
     bus.on('player:jump', () => this.thump(0.25, 160));
     bus.on('player:land', (v) => this.thump(Math.min(1, 0.25 + v * 0.05), 90));
     bus.on('ui:click', () => this.click());
+    bus.on('npc:scream', (e) => this.scream(e));
   }
 
   // Los navegadores exigen un gesto del usuario para iniciar audio.
@@ -255,6 +256,36 @@ export class AudioSystem {
       o.start(st);
       o.stop(st + 0.2);
     }
+  }
+
+  // grito corto de un peatón asustado (voz sintetizada con formantes)
+  scream(e) {
+    if (!this.started) return;
+    const now = this.ctx.currentTime;
+    if (this.lastScream && now - this.lastScream < 1.2) return;
+    this.lastScream = now;
+    const dist = this.listener ? Math.hypot(e.x - this.listener.x, e.z - this.listener.z) : 20;
+    if (dist > 45) return;
+    const v = 0.1 * (1 - dist / 45);
+    const o = this.ctx.createOscillator();
+    o.type = 'sawtooth';
+    const f0 = 380 + Math.random() * 260;
+    o.frequency.setValueAtTime(f0, now);
+    o.frequency.linearRampToValueAtTime(f0 * 1.35, now + 0.12);
+    o.frequency.exponentialRampToValueAtTime(f0 * 0.7, now + 0.55);
+    const f1 = this.ctx.createBiquadFilter();
+    f1.type = 'bandpass'; f1.frequency.value = 900; f1.Q.value = 3;
+    const f2 = this.ctx.createBiquadFilter();
+    f2.type = 'bandpass'; f2.frequency.value = 2400; f2.Q.value = 4;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(v, now + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
+    o.connect(f1).connect(g);
+    o.connect(f2).connect(g);
+    g.connect(this.sfx);
+    o.start(now);
+    o.stop(now + 0.65);
   }
 
   // bocina de otro auto (volumen según la distancia)

@@ -9,13 +9,14 @@ export const ACTIONS = {
   right: { label: 'Derecha / Girar a la derecha', context: 'both' },
   sprint: { label: 'Correr (mantener para sprint)', context: 'foot' },
   jump: { label: 'Saltar', context: 'foot' },
-  interact: { label: 'Interactuar', context: 'foot' },
+  interact: { label: 'Interactuar (tiendas, taller, garaje, misiones)', context: 'both' },
   vehicle: { label: 'Entrar / salir del vehículo', context: 'both' },
   handbrake: { label: 'Freno de mano', context: 'vehicle' },
   horn: { label: 'Bocina', context: 'vehicle' },
   camera: { label: 'Cambiar cámara', context: 'both' },
   map: { label: 'Mapa', context: 'both' },
   switchChar: { label: 'Cambiar de protagonista', context: 'both' },
+  radio: { label: 'Cambiar emisora de radio', context: 'vehicle' },
 };
 
 // Primera tecla = principal (configurable). Las siguientes son alternativas fijas.
@@ -33,6 +34,7 @@ export const DEFAULT_BINDINGS = {
   camera: ['KeyC'],
   map: ['KeyM'],
   switchChar: ['KeyQ'],
+  radio: ['KeyR'],
 };
 
 const NAMES = {

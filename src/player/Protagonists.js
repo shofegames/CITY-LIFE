@@ -24,11 +24,25 @@ export class ProtagonistSystem {
   constructor() {
     this.current = 'nico';
     this.models = {};
+    this.looks = {}; // ropa comprada (sobrescribe la apariencia base)
+  }
+
+  look(id) {
+    return { ...PROTAGONISTS[id].look, ...(this.looks[id] || {}) };
   }
 
   model(id) {
-    if (!this.models[id]) this.models[id] = new CharacterModel(PROTAGONISTS[id].look);
+    if (!this.models[id]) this.models[id] = new CharacterModel(this.look(id));
     return this.models[id];
+  }
+
+  setLook(id, look) {
+    this.looks[id] = { ...look };
+    if (this.models[id]) {
+      this.models[id].dispose();
+      delete this.models[id];
+    }
+    return this.model(id);
   }
 
   get info() {

@@ -89,12 +89,12 @@ export class TrafficSystem {
   }
 
   // ---------------------------------------------------------------- conducción
-  fixedUpdate(dt, playerPos, playerVehicle, playerOnFoot) {
+  fixedUpdate(dt, playerPos, playerVehicle, playerOnFoot, pedsOnRoad = []) {
     this.graph.update(dt);
-    for (const [v, ag] of this.agents) this.drive(v, ag, dt, playerPos, playerVehicle, playerOnFoot);
+    for (const [v, ag] of this.agents) this.drive(v, ag, dt, playerPos, playerVehicle, playerOnFoot, pedsOnRoad);
   }
 
-  drive(v, ag, dt, playerPos, playerVehicle, playerOnFoot) {
+  drive(v, ag, dt, playerPos, playerVehicle, playerOnFoot, pedsOnRoad) {
     const ctl = v.controls;
     if (v.dead) {
       ctl.throttle = 0; ctl.hold = true; ctl.steer = 0;
@@ -176,6 +176,16 @@ export class TrafficSystem {
       if (l.z > 0 && Math.abs(l.x) < 1.8 && Math.abs(playerPos.y - v.pos.y) < 2) {
         const gap = l.z - v.hl - 0.4;
         if (gap < gapMin) { gapMin = gap; blocked = true; }
+      }
+    }
+    // peatones cruzando o corriendo por la calle
+    for (const p of pedsOnRoad) {
+      const dx = p.pos.x - v.pos.x, dz = p.pos.z - v.pos.z;
+      if (dx * dx + dz * dz > 30 * 30) continue;
+      const l = v.toLocal(p.pos.x, p.pos.z);
+      if (l.z > 0 && Math.abs(l.x) < 2.2) {
+        const gap = l.z - v.hl - 0.4;
+        if (gap < gapMin) { gapMin = gap; blocked = false; }
       }
     }
     if (gapMin < Infinity) vT = Math.min(vT, Math.max(0, (gapMin - 3) * 0.75));

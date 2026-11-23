@@ -206,6 +206,22 @@ kbd {
 @keyframes starBlink { 50% { background: rgba(255,255,255,0.25); } }
 @media (max-width: 700px) { .big-title { font-size: 40px; } .ban-title { font-size: 34px; } }
 
+/* ---------- tiendas ---------- */
+.shop-screen { justify-content: flex-end; align-items: center; padding-right: 3vw; }
+.shop-panel { width: min(470px, 94vw); max-height: 90vh; overflow-y: auto; }
+.shop-section { margin: 14px 0 6px; font-size: 12px; font-weight: 800; letter-spacing: 0.2em; color: var(--accent); text-transform: uppercase; }
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.shop-item { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; text-align: left; font-size: 14px; padding: 10px 12px; }
+.shop-item .sw { width: 100%; height: 10px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.2); }
+.shop-item .price { font-size: 13px; color: #9ff0b5; font-weight: 700; }
+.shop-item.current { border-color: var(--accent); }
+.shop-item.disabled { opacity: 0.45; }
+.shop-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.shop-row .info { font-size: 14px; }
+.shop-row .info small { display: block; color: var(--ink-dim); font-size: 12px; }
+.shop-foot { margin-top: 14px; font-size: 15px; color: var(--ink-dim); }
+.shop-foot b { color: #9ff0b5; }
+
 .click-to-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 14px 24px; background: rgba(10,11,15,0.82); border-radius: 8px; font-size: 18px; font-weight: 600; }
 
 @media (max-height: 640px) {

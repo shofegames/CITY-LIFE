@@ -1,7 +1,7 @@
 {
   "name": "city-life",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "CITY LIFE — juego 3D de mundo abierto en navegador. SHOFE GAMES.",
   "type": "module",
   "scripts": {
