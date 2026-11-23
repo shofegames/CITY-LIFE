@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { charGeometry } from '../player/CharacterModel.js';
+import { charGeometry, partColor } from '../player/CharacterModel.js';
 
 // ============================================================================
 // Dibuja a todos los peatones con InstancedMesh: una draw call por tipo de
@@ -56,7 +56,7 @@ export class PedRenderer {
         if (i >= mesh.instanceMatrix.count) continue;
         _m.multiplyMatrices(part.joint.matrixWorld, part.matrix);
         mesh.setMatrixAt(i, _m);
-        mesh.setColorAt(i, _c.set(part.colorKey === 'dark' ? 0x15171b : rig.look[part.colorKey]));
+        mesh.setColorAt(i, _c.set(partColor(rig.look, part.colorKey)));
         this.counts.set(part.geoKey, i + 1);
       }
     }

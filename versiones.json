@@ -78,5 +78,20 @@
       "Brillo de luces (bloom) en calidad media y alta",
       "Playa y mar iluminados por la luna de noche, con más faroles en el paseo"
     ]
+  },
+  {
+    "version": "0.7.0",
+    "nombre": "Personaje nuevo",
+    "fecha": "2026-11-23",
+    "novedades": [
+      "Personajes más detallados: cara con ojos, cejas, boca y orejas; manos con dedos; zapatillas con suela; cuello de remera y cinturón",
+      "Brazos y piernas con forma (más anchos arriba, más finos en muñecas y tobillos)",
+      "Caminata nueva: el pie apoya talón y despega con la punta, la cadera se balancea y los pies no patinan",
+      "Carrera con rodillas altas y brazos doblados",
+      "Se inclina en las curvas, al arrancar y al frenar",
+      "Quieto respira, cambia el peso de pierna, mira alrededor y parpadea",
+      "La cabeza mira hacia donde apunta la cámara",
+      "Saltos y caídas con poses nuevas; al aterrizar se agacha"
+    ]
   }
 ]

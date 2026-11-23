@@ -34,6 +34,8 @@ export class Player {
     this.enabled = true;
     this._n = { x: 0, z: 0 };
     this._wish = new THREE.Vector3();
+    this.camYaw = 0;
+    this.anim = { turn: 0, accel: 0, lookYaw: 0, prevYaw: 0, prevSpeed: 0 };
   }
 
   // Cambiar de protagonista: otro modelo, mismo controlador.
@@ -66,6 +68,7 @@ export class Player {
 
   // cameraYaw: orientación horizontal de la cámara (para mover relativo a la vista)
   fixedUpdate(dt, cameraYaw) {
+    this.camYaw = cameraYaw;
     const input = this.input;
     const col = this.world.collision;
     // ---- intención de movimiento ----
@@ -163,7 +166,19 @@ export class Player {
     const k = 1 - Math.exp(-dt * 18);
     this.visualY += (this.position.y - this.visualY) * (this.grounded ? k : 1);
     this.syncModel();
-    const step = this.model.update(dt, this.speed, this.grounded, this.velocity.y, this.sprinting);
+    // datos para la animación: velocidad de giro, aceleración y hacia dónde mira la cámara
+    const A = this.anim;
+    if (dt > 0) {
+      const sp = this.speed;
+      const turn = Math.atan2(Math.sin(this.yaw - A.prevYaw), Math.cos(this.yaw - A.prevYaw)) / dt;
+      A.turn += (turn - A.turn) * Math.min(1, dt * 10);
+      A.accel += ((sp - A.prevSpeed) / dt - A.accel) * Math.min(1, dt * 8);
+      A.prevYaw = this.yaw;
+      A.prevSpeed = sp;
+    }
+    const rel = this.camYaw + Math.PI - this.yaw;
+    A.lookYaw = Math.atan2(Math.sin(rel), Math.cos(rel));
+    const step = this.model.update(dt, this.speed, this.grounded, this.velocity.y, this.sprinting, A);
     if (step) bus.emit('player:footstep', { speed: this.speed, x: this.position.x, z: this.position.z });
   }
 
