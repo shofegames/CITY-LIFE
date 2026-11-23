@@ -108,6 +108,77 @@ export class AudioSystem {
     this.windGain.gain.setTargetAtTime(0.02 + wind * 0.12, t, 0.8);
   }
 
+  // ------------------------------------------------------------- lluvia y truenos
+  // amount: 0..1 · inCar: dentro del auto se escucha apagada y golpeando el techo
+  setRain(amount, inCar) {
+    if (!this.started) return;
+    const c = this.ctx;
+    if (!this.rainGain) {
+      const src = c.createBufferSource();
+      src.buffer = this.noiseBuf;
+      src.loop = true;
+      const hp = c.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 700;
+      this.rainLP = c.createBiquadFilter();
+      this.rainLP.type = 'lowpass';
+      this.rainLP.frequency.value = 5000;
+      this.rainGain = c.createGain();
+      this.rainGain.gain.value = 0;
+      src.connect(hp).connect(this.rainLP).connect(this.rainGain).connect(this.amb);
+      src.start();
+      // rumor grave de la lluvia fuerte
+      const b = c.createBufferSource();
+      b.buffer = this.brownBuf;
+      b.loop = true;
+      const lp = c.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 500;
+      this.rainLow = c.createGain();
+      this.rainLow.gain.value = 0;
+      b.connect(lp).connect(this.rainLow).connect(this.amb);
+      b.start();
+    }
+    const t = c.currentTime;
+    this.rainGain.gain.setTargetAtTime(amount * (inCar ? 0.55 : 0.42), t, 0.6);
+    this.rainLow.gain.setTargetAtTime(amount * amount * (inCar ? 0.9 : 0.5), t, 0.6);
+    this.rainLP.frequency.setTargetAtTime(inCar ? 1300 : 5200, t, 0.15);
+  }
+
+  thunder(power = 1) {
+    if (!this.started) return;
+    const c = this.ctx, t = c.currentTime;
+    const dur = 2.5 + power * 2.5;
+    const src = c.createBufferSource();
+    src.buffer = this.brownBuf;
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(200 + power * 500, t);
+    lp.frequency.exponentialRampToValueAtTime(70, t + dur);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(1.6 * power, t + 0.08 + (1 - power) * 0.3);
+    g.gain.setTargetAtTime(0.9 * power, t + 0.4, 0.3);
+    g.gain.setTargetAtTime(0.0001, t + 1, dur * 0.3);
+    src.connect(lp).connect(g).connect(this.amb);
+    src.start(t, Math.random() * 1.5);
+    src.stop(t + dur + 1);
+    if (power > 0.75) {
+      // chasquido del rayo cercano
+      const n = c.createBufferSource();
+      n.buffer = this.noiseBuf;
+      const hp = c.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 1500;
+      const ng = c.createGain();
+      ng.gain.setValueAtTime(0.5 * power, t);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+      n.connect(hp).connect(ng).connect(this.amb);
+      n.start(t, Math.random());
+      n.stop(t + 0.4);
+    }
+  }
+
   // ------------------------------------------------------------- efectos
   footstep(speed) {
     if (!this.started) return;

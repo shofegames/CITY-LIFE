@@ -183,6 +183,7 @@ export class UI {
       ${this.rowRange('resolutionScale', 'Resolución de render', 'Menos resolución = más fluidez', 0.5, 1, 0.05, (v) => `${Math.round(v * 100)}%`)}
       ${this.rowRange('drawDistance', 'Distancia de dibujado', 'Hasta dónde se ve la ciudad', 180, 800, 20, (v) => `${v} m`)}
       ${this.rowCheck('shadows', 'Sombras', 'Desactivarlas mejora mucho el rendimiento')}
+      ${this.rowCheck('bloom', 'Brillo de luces', 'El neón, los faroles y el sol brillan con un halo. Cuesta algo de rendimiento')}
       ${this.rowSelect('fpsLimit', 'Límite de FPS', 'Limitar ahorra batería y evita calentamiento', [30, 60, 0].map((v) => `<option value="${v}" ${s.get('fpsLimit') === v ? 'selected' : ''}>${v ? v + ' FPS' : 'Sin límite'}</option>`).join(''))}
       ${this.rowCheck('dynamicResolution', 'Resolución dinámica', 'Baja la resolución automáticamente si el juego se pone lento')}
       ${this.rowCheck('showFps', 'Mostrar FPS', '')}
@@ -282,7 +283,8 @@ export class UI {
   updateHUD(st) {
     $('hud-money').textContent = `$${Math.floor(st.money).toLocaleString('es-AR')}`;
     const h = Math.floor(st.time), m = Math.floor((st.time % 1) * 60);
-    $('hud-time').textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    $('hud-time').textContent = `${st.weatherIcon ? st.weatherIcon + ' ' : ''}${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    if (st.weatherLabel) $('hud-time').title = st.weatherLabel;
     $('bar-health').style.width = `${st.health}%`;
     $('bar-stamina').style.width = `${st.stamina * 100}%`;
     const wanted = $('hud-wanted');

@@ -10,6 +10,7 @@ const TYPES = {
   dust: { color: [0.62, 0.52, 0.38], size: [1.0, 3.5], life: [0.9, 1.6], alpha: 0.4, gravity: -0.2, drag: 2 },
   spark: { color: [1.0, 0.72, 0.3], size: [0.18, 0.05], life: [0.25, 0.6], alpha: 1, gravity: 9.8, drag: 0.5, additive: true },
   engine: { color: [0.25, 0.25, 0.25], size: [0.8, 3.2], life: [1.2, 2.2], alpha: 0.45, gravity: -1.2, drag: 1 },
+  spray: { color: [0.78, 0.8, 0.84], size: [0.5, 2.6], life: [0.45, 0.85], alpha: 0.2, gravity: 1.2, drag: 2.5 },
   debris: { color: [0.2, 0.2, 0.22], size: [0.12, 0.1], life: [0.6, 1.0], alpha: 1, gravity: 9.8, drag: 0.2 },
 };
 

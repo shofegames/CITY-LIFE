@@ -321,10 +321,12 @@ export class CityBuilder {
         const len = d.face === 'n' || d.face === 's' ? d.x1 - d.x0 : d.z1 - d.z0;
         const w = Math.min(d.w || 7, len * 0.7);
         addFacadeSign(B, this.materials.neon, d.word, d.face, cx, cz, d.y, w, w / this.materials.neon.aspect * 1.25);
+        this.addSignReflection(d.word, d.face, cx, cz, 1.5);
         break;
       }
       case 'vsign':
         addFacadeSign(B, this.materials.neon, d.word, d.face, d.x, d.z, d.y, 2.4, d.h, true);
+        this.addSignReflection(d.word, d.face, d.x, d.z, 0.8);
         break;
       case 'roofSign': {
         const w = Math.min(16, (d.face === 'n' || d.face === 's' ? d.x1 - d.x0 : d.z1 - d.z0) * 0.8);
@@ -387,8 +389,12 @@ export class CityBuilder {
   buildProps() {
     const P = this.L.props;
     const col = this.collision;
+    this.lightRefl ||= [];
     for (const l of P.lamps) {
       const y = l.y ?? CURB;
+      const a = l.double ? 0 : l.rot + Math.PI;
+      // punto del piso bajo la lámpara (para los reflejos con lluvia)
+      this.lightRefl.push(l.x + Math.sin(a) * 1.6, y > 0.3 ? y + 0.03 : 0.06, l.z + Math.cos(a) * 1.6, 1, 0.72, 0.42, 0.55);
       this.addInstance(l.double ? 'lampDouble' : 'lamp', l.x, y, l.z, l.rot + Math.PI);
       this.addInstance('lightPool', l.x, y - CURB, l.z, l.double ? 0 : l.rot + Math.PI, 1);
       col.addBox(l.x - 0.15, 0, l.z - 0.15, l.x + 0.15, 7, l.z + 0.15, 'prop');
@@ -787,8 +793,20 @@ export class CityBuilder {
     }
   }
 
-  setNight(night) {
-    if (this.lightPoolMat) this.lightPoolMat.opacity = Math.max(0, night - 0.15) * 0.75;
+  // reflejo de color de un cartel de neón en la vereda/calle mojada de enfrente
+  addSignReflection(word, face, cx, cz, w) {
+    const cell = this.materials.neon.cells.get(word);
+    if (!cell) return;
+    const n = { n: [0, -1], s: [0, 1], w: [-1, 0], e: [1, 0] }[face];
+    if (!n) return;
+    const c = new THREE.Color(cell.color);
+    this.lightRefl ||= [];
+    this.lightRefl.push(cx + n[0] * 5, 0.06, cz + n[1] * 5, c.r * 1.3, c.g * 1.3, c.b * 1.3, w);
+  }
+
+  setNight(night, wet = 0) {
+    // con el piso mojado la luz de los faroles se refleja más
+    if (this.lightPoolMat) this.lightPoolMat.opacity = Math.max(0, night - 0.15) * (0.75 + wet * 0.45);
     if (this.ferrisLightMat) this.ferrisLightMat.color.setScalar(0.35 + night * 1.6);
   }
 

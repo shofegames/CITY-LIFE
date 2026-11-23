@@ -19,6 +19,7 @@ export const QUALITY_PRESETS = {
     npcDensity: 0.35,
     trafficDensity: 0.4,
     reflections: false,
+    bloom: false,
     effects: 0.3,
   },
   medium: {
@@ -34,6 +35,7 @@ export const QUALITY_PRESETS = {
     npcDensity: 0.7,
     trafficDensity: 0.7,
     reflections: false,
+    bloom: true,
     effects: 0.7,
   },
   high: {
@@ -49,6 +51,7 @@ export const QUALITY_PRESETS = {
     npcDensity: 1,
     trafficDensity: 1,
     reflections: true,
+    bloom: true,
     effects: 1,
   },
 };
@@ -58,6 +61,7 @@ const DEFAULTS = {
   resolutionScale: null,
   shadows: null,
   drawDistance: null,
+  bloom: null,
   fpsLimit: 60,
   dynamicResolution: true,
   showFps: false,
@@ -105,6 +109,7 @@ export class Settings {
     if (!this.data.quality || !QUALITY_PRESETS[this.data.quality]) {
       this.applyPreset(this.hardware.recommended, false);
     }
+    if (this.data.bloom == null) this.data.bloom = this.preset.bloom;
     this.data.bindings = { ...structuredClone(DEFAULT_BINDINGS), ...(this.data.bindings || {}) };
   }
 
@@ -129,6 +134,7 @@ export class Settings {
     this.data.resolutionScale = p.resolutionScale;
     this.data.shadows = p.shadows;
     this.data.drawDistance = p.drawDistance;
+    this.data.bloom = p.bloom;
     this.save();
     if (emit) bus.emit('settings:changed', { key: 'quality', value: name });
   }

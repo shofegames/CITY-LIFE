@@ -23,6 +23,11 @@ import { ProtagonistSystem, PROTAGONISTS, LARA_START } from '../player/Protagoni
 import { PedSystem } from '../npc/PedSystem.js';
 import { Radio, STATIONS } from '../audio/Radio.js';
 import { Economy } from '../economy/Economy.js';
+import { Vehicle } from '../vehicles/Vehicle.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 
 // Lugares de reaparición
 const POLICE_STATION = { x: -92, z: 140, yaw: Math.PI / 2, name: 'Comisaría Central' };
@@ -34,7 +39,9 @@ const HOSPITAL = { x: 208, z: -62, yaw: -Math.PI / 2, name: 'Hospital San Vega' 
 // ============================================================================
 
 const FIXED = 1 / 60;
-export const VERSION = '0.5.0';
+export const VERSION = '0.6.0';
+
+const WEATHER_ICONS = { clear: '☀', cloudy: '☁', rain: '☂', storm: '⚡' };
 
 export class Game {
   constructor(canvas) {
@@ -102,6 +109,10 @@ export class Game {
     this.radio = new Radio(this.audio);
     this.radioIndex = Math.floor(Math.random() * STATIONS.length);
     this.economy = new Economy(this);
+    this.world.weather.onThunder = (power) => {
+      this.audio.thunder(power);
+      if (power > 0.75) this.cameraSystem.shake = Math.max(this.cameraSystem.shake, 0.12);
+    };
     layout.landmarks.push(
       { name: POLICE_STATION.name, x: POLICE_STATION.x, z: POLICE_STATION.z, type: 'police' },
       { name: HOSPITAL.name, x: HOSPITAL.x, z: HOSPITAL.z, type: 'hospital' },
@@ -240,6 +251,47 @@ export class Game {
       this.onResize();
     }
     if (this.particles && (!key || key === 'quality')) this.particles.enabled = s.preset.effects;
+    if (!key || key === 'quality' || key === 'bloom') this.setupBloom();
+  }
+
+  // Brillo (bloom): render a una textura HDR + halo alrededor de las luces fuertes.
+  setupBloom() {
+    if (!this.settings.get('bloom')) {
+      this.composer = null;
+      return;
+    }
+    try {
+      if (!this.composerObj) {
+        const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+        const rt = new THREE.WebGLRenderTarget(size.x, size.y, {
+          type: THREE.HalfFloatType,
+          samples: this.settings.get('quality') === 'high' ? 4 : 0,
+        });
+        const c = new EffectComposer(this.renderer, rt);
+        c.addPass(new RenderPass(this.world.scene, this.camera));
+        this.bloomPass = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.5, 0.45, 1);
+        // el halo se calcula a menor resolución (es borroso igual): mucho más barato
+        const bloomSize = this.bloomPass.setSize.bind(this.bloomPass);
+        this.bloomPass.setSize = (w, h) => {
+          const f = this.settings.get('quality') === 'high' ? 1 : 0.5;
+          bloomSize(Math.max(64, Math.round(w * f)), Math.max(64, Math.round(h * f)));
+        };
+        c.addPass(this.bloomPass);
+        c.addPass(new OutputPass());
+        this.composerObj = c;
+      }
+      this.composer = this.composerObj;
+      this.resizeComposer();
+    } catch (err) {
+      console.warn('Bloom no disponible', err);
+      this.composer = null;
+    }
+  }
+
+  resizeComposer() {
+    if (!this.composer) return;
+    this.composer.setPixelRatio(this.renderer.getPixelRatio());
+    this.composer.setSize(window.innerWidth, window.innerHeight);
   }
 
   keyLabel(action) {
@@ -253,6 +305,7 @@ export class Game {
     const ratio = Math.min(window.devicePixelRatio || 1, preset.pixelRatioCap) * this.settings.get('resolutionScale') * this.dynScale;
     this.renderer.setPixelRatio(Math.max(0.35, ratio));
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+    this.resizeComposer();
     if (this.camera) {
       this.camera.aspect = window.innerWidth / Math.max(1, window.innerHeight);
       this.camera.updateProjectionMatrix();
@@ -273,7 +326,9 @@ export class Game {
     this.ui.setMenuState(this.saves.hasSave());
     this.ui.showScreen('menu');
     this.world.timeOfDay = 18.3;
+    this.world.weather.set('clear', true);
     if (this.audio.started) this.audio.startMusic();
+    this.audio.setRain(0, false);
   }
 
   continueGame() {
@@ -323,6 +378,7 @@ export class Game {
     this.player.health = p.health ?? 100;
     this.player.root.visible = true;
     this.world.timeOfDay = st.timeOfDay;
+    this.world.weather.load(st.weather);
     this.cameraSystem.mode = 'follow';
     this.cameraSystem.snapTo(this.player.position, p.yaw + Math.PI);
     this.ui.lastDistrict = null;
@@ -342,6 +398,7 @@ export class Game {
     this.ui.showScreen('pause');
     this.audio.stopEngine();
     this.radio.stop();
+    this.audio.setRain(0, false);
   }
 
   resume() {
@@ -641,6 +698,7 @@ export class Game {
     st.characters = st.characters || {};
     st.characters[st.current] = { ...(st.characters[st.current] || {}), ...st.player, health: p.health };
     st.timeOfDay = this.world.timeOfDay;
+    st.weather = this.world.weather.save();
     st.stats.distanceWalked = (st.stats.distanceWalked || 0);
     return st;
   }
@@ -685,13 +743,24 @@ export class Game {
     }
     if (this.state !== 'loading') {
       const focus = this.state === 'menu' ? this.camera.position : this.player.position;
-      this.world.update(this.state === 'playing' ? dt : 0, this.camera, focus);
+      const groundY = this.state === 'menu' ? 0 : this.playerVehicle ? this.playerVehicle.pos.y - 0.3 : this.player.position.y;
+      this.world.update(this.state === 'playing' ? dt : 0, this.camera, focus, groundY);
+      this.world.weather.setViewport(this.renderer.domElement.height, this.camera.fov);
       this.visTimer -= dt;
       if (this.visTimer <= 0) {
         this.visTimer = 0.25;
         this.world.updateVisibility(this.camera.position);
       }
-      this.renderer.render(this.world.scene, this.camera);
+      if (this.composer) {
+        // de noche brilla el neón y los faroles; de día solo el sol y reflejos fuertes
+        const n = this.world.night;
+        this.bloomPass.strength = 0.2 + n * 0.32;
+        this.bloomPass.threshold = 1.5 - n * 0.65;
+        this.composer.render(dt);
+      } else {
+        this.renderer.autoClear = true;
+        this.renderer.render(this.world.scene, this.camera);
+      }
     }
     this.input.endFrame();
   }
@@ -769,6 +838,9 @@ export class Game {
 
     const focus = car ? car.pos : this.player.position;
     this.traffic.manage(dt, focus, this.camera);
+    const weather = this.world.weather;
+    Vehicle.wetGrip = 1 - weather.wet * 0.2;
+    this.vehicles.wet = weather.wet;
     this.vehicles.update(dt, this.world.night, focus, this.camera);
     this.trafficLights.update(dt);
     this.particles.update(dt, this.renderer.domElement.height, this.camera.fov);
@@ -817,6 +889,7 @@ export class Game {
       this.ui.updateHUD({
         money: this.gameState.money, time: this.world.timeOfDay, health: this.player.health,
         stamina: this.player.stamina, wanted: this.police.wanted, searching: this.police.searching, fps: this.fps, renderScale: this.settings.get('resolutionScale') * this.dynScale,
+        weatherIcon: weather.type === 'clear' && this.world.night > 0.5 ? '☾' : WEATHER_ICONS[weather.type], weatherLabel: weather.label,
       });
       if (car) this.ui.updateVehicleHUD(car);
     }
@@ -831,7 +904,8 @@ export class Game {
       const d = this.world.districtAt(this.player.position.x, this.player.position.z);
       this.ui.showDistrict(d);
       const busy = d ? { downtown: 1, commercial: 0.8, industrial: 0.6, coastal: 0.4, suburbs: 0.3, rich: 0.2 }[d.id] : 0.1;
-      this.audio.setAmbience(busy * (1 - this.world.night * 0.5), d?.id === 'coastal' ? 1 : 0.3);
+      this.audio.setAmbience(busy * (1 - this.world.night * 0.5) * (1 - weather.rain * 0.5), (d?.id === 'coastal' ? 1 : 0.3) + weather.rain * 0.5);
+      this.audio.setRain(weather.rain, !!car);
     }
     this.autosaveTimer += dt;
     if (this.autosaveTimer > 60) {

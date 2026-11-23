@@ -654,7 +654,7 @@ function addBeach(L) {
     if (!nearPier(pz)) L.props.palms.push({ x: BEACH.x0 + 12 + rng.range(0, 10), z: pz, s: rng.range(0.9, 1.3), beach: true });
     if (rng.chance(0.5) && !nearPier(z + 8, 3)) L.props.benches.push({ x: BEACH.x0 + 6.2, z: z + 8, rot: -Math.PI / 2, y: 0.35 });
   }
-  for (let z = L.roadExtent.min + 20; z < L.roadExtent.max; z += 50) if (!nearPier(z, 3)) L.props.lamps.push({ x: BEACH.x0 + 6.6, z, rot: -Math.PI / 2, y: 0.35 });
+  for (let z = L.roadExtent.min + 20; z < L.roadExtent.max; z += 25) if (!nearPier(z, 3)) L.props.lamps.push({ x: BEACH.x0 + 6.6, z, rot: -Math.PI / 2, y: 0.35 });
   // equipamiento de playa: sombrillas con reposeras, guardavidas, casetas y vóley
   const B = L.beachProps;
   const umbrellaColors = [0xff2f7d, 0x2ff5ff, 0xffe14d, 0xff8a3d, 0xb45cff, 0x4dff88, 0xffffff];

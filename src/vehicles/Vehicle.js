@@ -180,7 +180,7 @@ export class Vehicle {
     let Nf = N * (this.b / wb) - (m * this.longAcc * 0.5) / wb;
     Nf = THREE.MathUtils.clamp(Nf, N * 0.2, N * 0.8);
     const Nr = N - Nf;
-    const mu = T.grip * surf.grip * (dead ? 0.8 : 1);
+    const mu = T.grip * surf.grip * (dead ? 0.8 : 1) * (this.driver === 'player' ? Vehicle.wetGrip : 1);
     let muR = mu, muF = mu;
     if (ctl.handbrake) muR *= 0.42;
 
@@ -491,3 +491,6 @@ export class Vehicle {
 }
 
 Vehicle.nextId = 1;
+
+// agarre extra por clima (1 = seco). Lo actualiza el juego según la lluvia.
+Vehicle.wetGrip = 1;

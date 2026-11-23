@@ -4,6 +4,7 @@ import { TextureFactory } from './TextureFactory.js';
 import { MaterialLibrary } from './Materials.js';
 import { CityBuilder } from './CityBuilder.js';
 import { Sky } from './Sky.js';
+import { Weather } from './Weather.js';
 import { CollisionWorld } from '../physics/CollisionWorld.js';
 
 // ============================================================================
@@ -38,6 +39,8 @@ export class World {
     this.scene.add(this.city.root);
     yield 'Encendiendo el cielo';
     this.sky = new Sky(this.scene);
+    this.weather = new Weather(this.scene, this.settings.get('quality'));
+    this.weather.setLamps(this.city.lightRefl || []);
     this.applyQuality();
   }
 
@@ -54,6 +57,7 @@ export class World {
     this.useEnv = preset.lighting === 'standard';
     if (!this.useEnv) this.scene.environment = null;
     this.envHour = -10;
+    this.weather?.setQuality(s.get('quality'));
   }
 
   get drawDistance() {
@@ -69,15 +73,18 @@ export class World {
     return d ? { id: d, ...DISTRICTS[d] } : null;
   }
 
-  update(dt, camera, focus) {
+  update(dt, camera, focus, groundY = 0) {
     this.clock += dt;
     this.timeOfDay = (this.timeOfDay + dt * this.timeScale) % 24;
-    this.sky.update(this.timeOfDay, camera, focus, this.drawDistance);
+    const w = this.weather;
+    w.update(dt, camera, groundY, this.sky.night);
+    this.sky.update(this.timeOfDay, camera, focus, this.drawDistance, { cloud: w.cloud, rain: w.rain, flash: w.flash, dt: dt || 0.016 });
     this.materials.updateNight(this.sky.night);
-    this.city.setNight(this.sky.night);
+    this.materials.setWet(w.wet);
+    this.city.setNight(this.sky.night, w.wet);
     this.city.update(dt, this.clock);
-    // mapa de entorno (reflejos) regenerado cada media hora de juego
-    if (this.useEnv && Math.abs(this.timeOfDay - this.envHour) > 0.5) this.regenerateEnv();
+    // mapa de entorno (reflejos) regenerado cada media hora de juego o si cambia el clima
+    if (this.useEnv && (Math.abs(this.timeOfDay - this.envHour) > 0.5 || Math.abs(w.cloud - this.envCloud) > 0.08)) this.regenerateEnv();
   }
 
   updateVisibility(camPos) {
@@ -88,6 +95,7 @@ export class World {
 
   regenerateEnv() {
     this.envHour = this.timeOfDay;
+    this.envCloud = this.weather.cloud;
     if (!this.pmrem) this.pmrem = new THREE.PMREMGenerator(this.renderer);
     if (!this.envScene) {
       this.envScene = new THREE.Scene();

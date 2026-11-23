@@ -314,6 +314,14 @@ export class VehicleSystem {
       const f = v.forward;
       P.emit('dust', v.pos.x - f.x * v.hl, v.pos.y + 0.3, v.pos.z - f.z * v.hl, 0, 0.5, 0, 1, 0.8);
     }
+    // agua que levantan las ruedas con el piso mojado
+    if (this.wet > 0.3 && sp > 9 && !offroad && Math.random() < this.wet * (v.driver === 'player' ? 0.9 : 0.25)) {
+      const f = v.forward, l = v.left;
+      for (const s of [-1, 1]) {
+        const x = v.pos.x - f.x * v.b + l.x * s * v.hw, z = v.pos.z - f.z * v.b + l.z * s * v.hw;
+        P.emit('spray', x, v.pos.y + 0.25, z, v.vx * 0.35, 0.8, v.vz * 0.35, 1, 0.6);
+      }
+    }
     if (v.damage > 55 && Math.random() < (v.damage - 50) / 80) {
       const f = v.forward;
       P.emit('engine', v.pos.x + f.x * (v.hl - 0.8), v.pos.y + v.height * 0.75, v.pos.z + f.z * (v.hl - 0.8), v.vx * 0.3, 1.2, v.vz * 0.3, 1, 0.3);

@@ -17,7 +17,7 @@ const KEYS = [
   { h: 24, top: 0x04060f, hor: 0x111a30, sun: 0x8aa2ff, si: 0.35, amb: 0.48, gnd: 0x0b0d12 },
 ];
 
-const _a = new THREE.Color(), _b = new THREE.Color();
+const _a = new THREE.Color(), _b = new THREE.Color(), _g = new THREE.Color(), _w = new THREE.Color(1, 1, 1);
 
 function sample(hour) {
   let i = 0;
@@ -49,6 +49,13 @@ export class Sky {
       sunDir: { value: new THREE.Vector3(0, 1, 0) },
       sunColor: { value: new THREE.Color() },
       sunSize: { value: 1 },
+      moonDir: { value: new THREE.Vector3(0, 1, 0) },
+      moonAmt: { value: 0 },
+      cloudCover: { value: 0.25 },
+      cloudColor: { value: new THREE.Color(1, 1, 1) },
+      cloudShade: { value: new THREE.Color(0.6, 0.6, 0.65) },
+      cloudTime: { value: 0 },
+      flash: { value: 0 },
     };
     const mat = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -65,13 +72,41 @@ export class Sky {
       fragmentShader: /* glsl */ `
         uniform vec3 topColor; uniform vec3 horizonColor; uniform vec3 groundColor;
         uniform vec3 sunDir; uniform vec3 sunColor; uniform float sunSize;
+        uniform vec3 moonDir; uniform float moonAmt;
+        uniform float cloudCover; uniform vec3 cloudColor; uniform vec3 cloudShade; uniform float cloudTime; uniform float flash;
         varying vec3 vDir;
+        float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float vnoise(vec2 p) {
+          vec2 i = floor(p), f = fract(p);
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+        }
+        float fbm(vec2 p) {
+          float v = 0.0, a = 0.5;
+          for (int i = 0; i < 4; i++) { v += a * vnoise(p); p = p * 2.03 + 17.1; a *= 0.5; }
+          return v;
+        }
         void main() {
           vec3 d = normalize(vDir);
           float h = d.y;
           vec3 col = h > 0.0 ? mix(horizonColor, topColor, pow(clamp(h, 0.0, 1.0), 0.55)) : mix(horizonColor, groundColor, clamp(-h * 4.0, 0.0, 1.0));
           float sd = max(dot(d, normalize(sunDir)), 0.0);
-          col += sunColor * (pow(sd, 900.0 / sunSize) * 4.0 + pow(sd, 12.0) * 0.28 * step(0.0, sunDir.y + 0.1));
+          vec3 sun = sunColor * (pow(sd, 900.0 / sunSize) * 4.0 + pow(sd, 12.0) * 0.28 * step(0.0, sunDir.y + 0.1));
+          float md = max(dot(d, normalize(moonDir)), 0.0);
+          vec3 moon = vec3(0.85, 0.9, 1.0) * moonAmt * (smoothstep(0.99965, 0.99985, md) * 1.6 + pow(md, 300.0) * 0.25);
+          // nubes proyectadas sobre un plano alto
+          float cov = 0.0;
+          if (h > 0.0) {
+            vec2 uv = d.xz / (h + 0.09) * 0.9 + vec2(cloudTime * 0.012, cloudTime * 0.005);
+            float n = fbm(uv);
+            float thr = 1.0 - cloudCover;
+            cov = smoothstep(thr - 0.12, thr + 0.22, n) * smoothstep(0.0, 0.12, h);
+            float shade = smoothstep(thr, thr + 0.5, fbm(uv * 1.7 + 4.0));
+            vec3 cc = mix(cloudColor, cloudShade, shade) + sunColor * pow(sd, 6.0) * 0.35 * (1.0 - shade);
+            col = mix(col, cc, cov * 0.95);
+          }
+          col += (sun + moon) * (1.0 - cov);
+          col += vec3(0.55, 0.6, 0.8) * flash * (0.4 + cov);
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -129,8 +164,22 @@ export class Sky {
     this.shadowExtent = extent;
   }
 
-  update(hour, camera, focus, drawDistance) {
+  update(hour, camera, focus, drawDistance, weather) {
     const k = sample(hour);
+    const cloud = weather?.cloud ?? 0.25, rain = weather?.rain ?? 0, flash = weather?.flash ?? 0;
+    // cielo cubierto: colores grises, menos sol
+    const over = THREE.MathUtils.smoothstep(cloud, 0.45, 1);
+    if (over > 0) {
+      const grey = (c, f) => {
+        const l = c.r * 0.3 + c.g * 0.55 + c.b * 0.15;
+        c.lerp(_g.setRGB(l, l * 1.02, l * 1.08).multiplyScalar(f), over * 0.85);
+      };
+      grey(k.top, 0.75);
+      grey(k.hor, 0.85);
+      grey(k.gnd, 0.8);
+      k.si *= 1 - over * 0.78;
+      k.amb *= 1 - over * 0.22;
+    }
     this.night = nightFactor(hour);
     // sol: sale por el este (+X) a las 6, se pone al oeste a las 18:30
     const dayT = (hour - 6) / 12.5;
@@ -138,19 +187,31 @@ export class Sky {
     const az = Math.PI * dayT;
     this.sunDir.set(Math.cos(az), Math.max(elev, -0.3), -0.35).normalize();
     const isDay = this.sunDir.y > 0.02;
-    // de noche la luz direccional es la luna (opuesta y azulada)
-    const lightDir = isDay ? this.sunDir : new THREE.Vector3(-this.sunDir.x * 0.6, 0.75, 0.3).normalize();
+    // de noche la luz direccional es la luna: baja sobre el mar (este) para que brille en el agua
+    this.moonDir = (this.moonDir || new THREE.Vector3()).set(0.62 - this.sunDir.x * 0.25, 0.3, 0.22).normalize();
+    const lightDir = isDay ? this.sunDir : this.moonDir;
 
     this.uniforms.topColor.value.copy(k.top);
     this.uniforms.horizonColor.value.copy(k.hor);
     this.uniforms.groundColor.value.copy(k.gnd);
     this.uniforms.sunDir.value.copy(this.sunDir);
     this.uniforms.sunColor.value.copy(k.sun).multiplyScalar(isDay ? 1 : 0);
-    this.starMat.opacity = this.night * 0.9;
+    this.starMat.opacity = this.night * 0.9 * (1 - THREE.MathUtils.smoothstep(cloud, 0.3, 0.8));
+    // luna: visible de noche cuando no está nublado
+    const u = this.uniforms;
+    u.moonDir.value.copy(this.moonDir);
+    u.moonAmt.value = this.night;
+    // nubes: blancas de día, grises con lluvia, oscuras de noche
+    u.cloudCover.value = cloud;
+    u.cloudTime.value = (u.cloudTime.value + (weather?.dt ?? 0) * (1 + rain * 2)) % 100000;
+    const bright = 0.25 + (1 - this.night) * 0.75;
+    u.cloudColor.value.copy(k.hor).lerp(_w, 0.55 * (1 - this.night)).multiplyScalar(bright * (1 - over * 0.35) + this.night * 0.12);
+    u.cloudShade.value.copy(u.cloudColor.value).multiplyScalar(0.62 - over * 0.12);
+    u.flash.value = flash;
 
-    this.hemi.color.copy(k.top).lerp(new THREE.Color(0xffffff), 0.45);
+    this.hemi.color.copy(k.top).lerp(_w, 0.45);
     this.hemi.groundColor.copy(k.gnd);
-    this.hemi.intensity = k.amb * 1.25;
+    this.hemi.intensity = k.amb * 1.25 + flash * 2.2;
     this.sun.color.copy(k.sun);
     this.sun.intensity = k.si;
 
@@ -158,8 +219,8 @@ export class Sky {
     this.fogColor.copy(k.hor);
     this.scene.fog.color.copy(this.fogColor);
     this.uniforms.groundColor.value.copy(k.hor);
-    this.scene.fog.near = drawDistance * 0.3;
-    this.scene.fog.far = drawDistance * 0.97;
+    this.scene.fog.near = drawDistance * 0.3 * (1 - rain * 0.75);
+    this.scene.fog.far = drawDistance * 0.97 * (1 - rain * 0.45);
 
     // domo y estrellas siguen a la cámara
     const r = camera.far * 0.9;

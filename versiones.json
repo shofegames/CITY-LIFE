@@ -63,5 +63,20 @@
       "Muelle de Costa Azul con rueda gigante iluminada",
       "Playa con sombrillas, reposeras, guardavidas, casetas, vóley y chiringuito"
     ]
+  },
+  {
+    "version": "0.6.0",
+    "nombre": "Lluvia y gráficos",
+    "fecha": "2026-11-23",
+    "novedades": [
+      "Clima que cambia solo: despejado, nublado, lluvia y tormenta",
+      "Lluvia con gotas, salpicaduras en el piso y sonido (más apagado dentro del auto)",
+      "Tormentas con relámpagos y truenos",
+      "Calles mojadas con charcos y reflejos de faroles y carteles de neón",
+      "Con lluvia el auto agarra menos y las ruedas levantan agua",
+      "Nubes en el cielo y luna",
+      "Brillo de luces (bloom) en calidad media y alta",
+      "Playa y mar iluminados por la luna de noche, con más faroles en el paseo"
+    ]
   }
 ]
