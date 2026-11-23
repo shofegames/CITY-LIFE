@@ -15,6 +15,15 @@ import { VehicleSystem } from '../vehicles/VehicleSystem.js';
 import { RoadGraph } from '../traffic/RoadGraph.js';
 import { TrafficSystem } from '../traffic/TrafficSystem.js';
 import { TrafficLights } from '../traffic/TrafficLights.js';
+import { RouteFinder, MarkerSystem } from '../navigation/Navigation.js';
+import { PoliceSystem } from '../police/PoliceSystem.js';
+import { MissionSystem } from '../missions/MissionSystem.js';
+import { buildStory } from '../missions/story.js';
+import { ProtagonistSystem, PROTAGONISTS, LARA_START } from '../player/Protagonists.js';
+
+// Lugares de reaparición
+const POLICE_STATION = { x: -92, z: 140, yaw: Math.PI / 2, name: 'Comisaría Central' };
+const HOSPITAL = { x: 208, z: -62, yaw: -Math.PI / 2, name: 'Hospital San Vega' };
 
 // ============================================================================
 // Game: arranque, máquina de estados (carga → menú → juego ↔ pausa/mapa),
@@ -79,12 +88,25 @@ export class Game {
     this.traffic = new TrafficSystem(this.roads, this.vehicles, this.settings);
     this.trafficLights = new TrafficLights(this.world.scene, layout, this.roads);
     this.playerVehicle = null;
+    this.routes = new RouteFinder(layout);
+    this.markers = new MarkerSystem(this.world.scene);
+    this.police = new PoliceSystem(this);
+    this.protagonist = new ProtagonistSystem();
+    this.story = buildStory();
+    this.missions = new MissionSystem(this, this.story);
+    this.gps = { target: null, timer: 0, last: null };
+    layout.landmarks.push(
+      { name: POLICE_STATION.name, x: POLICE_STATION.x, z: POLICE_STATION.z, type: 'police' },
+      { name: HOSPITAL.name, x: HOSPITAL.x, z: HOSPITAL.z, type: 'hospital' },
+      { name: 'Taller Duarte', x: -108, z: 66, type: 'shop' },
+    );
     this.ui.setLoading(0.97, 'Preparando al personaje...');
     await nextFrame();
 
     this.camera = new THREE.PerspectiveCamera(65, 1, 0.3, 1000);
     this.cameraSystem = new CameraSystem(this.camera, this.world.collision);
     this.player = new Player(this.world, this.input);
+    this.player.setModel(this.protagonist.model('nico'));
     this.world.scene.add(this.player.root);
     this.player.root.visible = false;
     this.map = new MapSystem(this.world.layout);
@@ -158,6 +180,19 @@ export class Game {
     bus.on('vehicle:horn', (e) => {
       const p = this.player.position;
       this.audio.distantHorn(Math.hypot(e.x - p.x, e.z - p.z));
+    });
+    bus.on('police:busted', () => this.busted());
+    bus.on('police:wanted', ({ level, prev }) => {
+      if (level > prev) this.audio.jingle('star');
+    });
+    bus.on('police:evaded', () => this.ui.toast('Perdiste a la policía'));
+    bus.on('vehicle:crash', (e) => {
+      // embestir a la policía es delito; los choques graves también si te ven
+      const pv = this.playerVehicle;
+      if (!pv || (e.vehicle !== pv && e.other !== pv)) return;
+      const other = e.vehicle === pv ? e.other : e.vehicle;
+      if (other && other.kind === 'police' && e.impact > 3) this.police.report('assault-police', pv.pos);
+      else if (other && other.kind === 'traffic' && e.impact > 9) this.police.report('reckless', pv.pos);
     });
     bus.on('vehicle:destroyed', (v) => {
       if (v === this.playerVehicle) this.ui.toast('El auto quedó destruido. Bajate con ' + this.keyLabel('vehicle') + '.', 3.5);
@@ -258,9 +293,21 @@ export class Game {
     this.audio.unlock();
     this.audio.stopMusic();
     if (this.playerVehicle) this.leaveVehicleImmediately();
-    const p = st.player;
+    this.missions.abort();
+    this.missions.clearStarts();
+    this.missions.retry = null;
+    this.police.reset();
+    // partidas viejas: completar datos de los protagonistas
+    st.current = st.current || 'nico';
+    st.characters = st.characters || {};
+    st.characters.nico = st.characters.nico || { ...st.player, health: st.health ?? 100 };
+    st.characters.lara = st.characters.lara || { ...LARA_START };
+    this.protagonist.current = st.current;
+    this.player.setModel(this.protagonist.model(st.current));
+    this.ui.setCharacter(PROTAGONISTS[st.current]);
+    const p = st.characters[st.current];
     this.player.spawn(p.x, p.y, p.z, p.yaw);
-    this.player.health = st.health;
+    this.player.health = p.health ?? 100;
     this.player.root.visible = true;
     this.world.timeOfDay = st.timeOfDay;
     this.cameraSystem.mode = 'follow';
@@ -293,16 +340,108 @@ export class Game {
     if (this.playerVehicle) this.audio.startEngine();
   }
 
+  // ------------------------------------------------------------------ protagonistas
+  async switchCharacter() {
+    if (this.switching) return;
+    if (this.missions.active) return this.ui.toast('No podés cambiar de personaje durante una misión');
+    if (this.police.wanted > 0) return this.ui.toast('Perdé a la policía antes de cambiar de personaje');
+    this.switching = true;
+    const st = this.gameState;
+    this.collectState();
+    this.ui.fade(true);
+    await new Promise((r) => setTimeout(r, 480));
+    if (this.playerVehicle) this.leaveVehicleImmediately();
+    const next = this.protagonist.other();
+    this.protagonist.current = next;
+    st.current = next;
+    this.player.setModel(this.protagonist.model(next));
+    this.player.root.visible = true;
+    const p = st.characters[next];
+    this.player.spawn(p.x, p.y, p.z, p.yaw);
+    this.player.health = p.health ?? 100;
+    this.cameraSystem.snapTo(this.player.position, p.yaw + Math.PI);
+    this.ui.setCharacter(PROTAGONISTS[next]);
+    this.ui.lastDistrict = null;
+    this.missions.clearStarts();
+    this.ui.fade(false);
+    this.ui.bigMessage(PROTAGONISTS[next].name.toUpperCase(), PROTAGONISTS[next].bio, 'pass', 3);
+    this.switching = false;
+  }
+
+  teleportPlayer(x, z, yaw) {
+    if (this.playerVehicle) this.leaveVehicleImmediately();
+    const y = this.world.collision.groundHeight(x, z, 3, 0.3);
+    this.player.spawn(x, y, z, yaw);
+    this.cameraSystem.snapTo(this.player.position, yaw + Math.PI);
+  }
+
+  addMoney(n) {
+    if (!this.gameState || !n) return;
+    this.gameState.money = Math.max(0, this.gameState.money + n);
+    this.ui.moneyDelta(n);
+    if (n > 0) this.audio.jingle('money');
+  }
+
+  setGps(target) {
+    if (!target) {
+      this.gps.target = null;
+      this.map.route = null;
+      return;
+    }
+    this.gps.target = target;
+  }
+
+  updateGps(dt) {
+    const t = this.gps.target;
+    if (!t) return;
+    this.gps.timer -= dt;
+    const from = this.playerVehicle ? this.playerVehicle.pos : this.player.position;
+    const moved = !this.gps.last || this.gps.last.distanceTo(t) > 8;
+    if (this.gps.timer <= 0 || moved) {
+      this.gps.timer = 1;
+      this.gps.last = new THREE.Vector3(t.x, 0, t.z);
+      this.map.route = Math.hypot(t.x - from.x, t.z - from.z) < 25 ? [new THREE.Vector3(from.x, 0, from.z), new THREE.Vector3(t.x, 0, t.z)] : this.routes.route(from, t);
+    } else if (this.map.route) this.map.route[0] = new THREE.Vector3(from.x, 0, from.z);
+  }
+
+  isVisible(p) {
+    if (!this._frustum) { this._frustum = new THREE.Frustum(); this._pm = new THREE.Matrix4(); }
+    this._pm.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+    this._frustum.setFromProjectionMatrix(this._pm);
+    return this._frustum.containsPoint(new THREE.Vector3(p.x, (p.y || 0) + 1, p.z)) && this.camera.position.distanceTo(p) < 160;
+  }
+
+  async busted() {
+    if (this.state !== 'playing' || this.switching) return;
+    this.switching = true;
+    this.ui.bigMessage('ARRESTADO', 'La policía te atrapó', 'fail', 3.5);
+    this.audio.jingle('fail');
+    await new Promise((r) => setTimeout(r, 1400));
+    this.ui.fade(true);
+    await new Promise((r) => setTimeout(r, 500));
+    const fine = Math.min(this.gameState.money, Math.max(100, Math.round(this.gameState.money * 0.1)));
+    this.police.reset();
+    this.teleportPlayer(POLICE_STATION.x, POLICE_STATION.z, POLICE_STATION.yaw);
+    this.addMoney(-fine);
+    this.ui.fade(false);
+    this.ui.toast(`Saliste de la ${POLICE_STATION.name}. Multa: $${fine}`, 4);
+    this.switching = false;
+  }
+
   // ------------------------------------------------------------------ vehículos
   enterVehicle(v) {
+    if (v.kind === 'police' && v.driver === 'police') return this.ui.toast('No podés robar un patrullero con un policía adentro');
     if (v.driver === 'ai') {
       this.traffic.release(v);
       this.vehicles.ejectDriver(v);
       this.ui.toast(`Robaste un ${v.T.name}`);
+      this.police.report('carjack', v.pos);
     } else if (v.kind === 'parked') this.vehicles.releaseFromSlot(v);
     v.driver = 'player';
-    v.kind = 'free';
+    if (v.kind !== 'mission') v.kind = 'free';
     v.sleeping = false;
+    // si un conductor guionado lo manejaba, el control pasa al jugador
+    if (this.missions.active) this.missions.active.ctx.tracked.drivers = this.missions.active.ctx.tracked.drivers.filter((d) => d.v !== v);
     v.controls.hold = false;
     this.playerVehicle = v;
     this.player.root.visible = false;
@@ -404,6 +543,9 @@ export class Game {
     const p = this.player;
     st.player = { x: p.position.x, y: p.position.y, z: p.position.z, yaw: p.yaw };
     st.health = p.health;
+    st.current = this.protagonist.current;
+    st.characters = st.characters || {};
+    st.characters[st.current] = { ...st.player, health: p.health };
     st.timeOfDay = this.world.timeOfDay;
     st.stats.distanceWalked = (st.stats.distanceWalked || 0);
     return st;
@@ -466,6 +608,7 @@ export class Game {
       this.ui.tutorialProgress('look', Math.abs(dx) + Math.abs(dy));
     }
     if (input.wasPressed('map')) return this.openMap();
+    if (input.wasPressed('switchChar')) this.switchCharacter();
     if (input.wasPressed('camera')) {
       if (pv) this.cameraSystem.cycleVehicleView();
       else this.cameraSystem.cyclePreset();
@@ -502,6 +645,8 @@ export class Game {
           if (hit.vehicle.driver === 'ai') bus.emit('vehicle:horn', { x: hit.vehicle.pos.x, z: hit.vehicle.pos.z });
         }
       }
+      this.police.fixedUpdate(FIXED);
+      this.missions.fixedUpdate(FIXED);
       this.vehicles.fixedUpdate(FIXED);
       this.traffic.fixedUpdate(FIXED, this.player.position, car, !car);
       this.acc -= FIXED;
@@ -528,6 +673,12 @@ export class Game {
     this.vehicles.update(dt, this.world.night, focus, this.camera);
     this.trafficLights.update(dt);
     this.particles.update(dt, this.renderer.domElement.height, this.camera.fov);
+    this.police.update(dt);
+    this.missions.update(dt);
+    this.markers.update(dt);
+    this.updateGps(dt);
+    this.map.markers = [...this.missions.blips(), ...this.police.blips()];
+    this.map.search = this.police.searching ? { x: this.police.lastSeen.x, z: this.police.lastSeen.z, r: 30 + this.police.wanted * 15 } : null;
 
     if (car) {
       this.cameraSystem.updateVehicle(dt, car);
@@ -536,11 +687,13 @@ export class Game {
       this.ui.setPrompt(null);
     } else {
       this.cameraSystem.update(dt, this.player.root.position, { sprint: this.player.sprinting, run: input.isDown('sprint') && this.player.speed > 3 });
-      if (nearCar) {
+      if (this.missions.prompt) this.ui.setPrompt(this.missions.prompt);
+      else if (nearCar) {
         const verb = nearCar.driver === 'ai' ? 'Robar' : 'Subir al';
         this.ui.setPrompt(`<kbd>${this.keyLabel('vehicle')}</kbd> ${verb} ${nearCar.T.name} <span class="muted">· ${nearCar.T.category}</span>`);
       } else this.ui.setPrompt(null);
     }
+    if (car && this.missions.prompt && this.missions.retry) this.ui.setPrompt(this.missions.prompt);
     this.gameState.playTime += dt;
 
     if (this.player.health <= 0) this.respawn();
@@ -551,7 +704,7 @@ export class Game {
       this.hudTimer = 0.1;
       this.ui.updateHUD({
         money: this.gameState.money, time: this.world.timeOfDay, health: this.player.health,
-        stamina: this.player.stamina, wanted: 0, fps: this.fps, renderScale: this.settings.get('resolutionScale') * this.dynScale,
+        stamina: this.player.stamina, wanted: this.police.wanted, searching: this.police.searching, fps: this.fps, renderScale: this.settings.get('resolutionScale') * this.dynScale,
       });
       if (car) this.ui.updateVehicleHUD(car);
     }
@@ -576,12 +729,14 @@ export class Game {
   }
 
   respawn() {
+    bus.emit('player:wasted');
+    this.police.reset();
     if (this.playerVehicle) this.leaveVehicleImmediately();
-    const s = this.world.layout.spawn;
-    this.ui.toast('Te lastimaste. Despertás en la Avenida Central.', 3.5);
-    this.player.spawn(s.x, s.y, s.z, s.yaw);
+    const cost = Math.min(this.gameState.money, 150);
+    this.teleportPlayer(HOSPITAL.x, HOSPITAL.z, HOSPITAL.yaw);
     this.player.health = 100;
-    this.cameraSystem.snapTo(this.player.position, s.yaw + Math.PI);
+    this.addMoney(-cost);
+    this.ui.bigMessage('HERIDO', `Te atendieron en el ${HOSPITAL.name}. Gastos médicos: $${cost}`, 'fail', 3.5);
   }
 
   // FPS medidos + resolución dinámica

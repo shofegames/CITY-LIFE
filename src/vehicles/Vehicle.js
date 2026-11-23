@@ -78,6 +78,13 @@ export class Vehicle {
     this.interiorMesh = new THREE.Mesh(tpl.interior, materials.body);
     this.interiorMesh.visible = false;
     this.body.add(this.bodyMesh, this.headMesh, this.tailMesh, this.interiorMesh);
+    if (tpl.barRed) {
+      this.barRed = new THREE.Mesh(tpl.barRed, materials.barRedOff);
+      this.barBlue = new THREE.Mesh(tpl.barBlue, materials.barBlueOff);
+      this.body.add(this.barRed, this.barBlue);
+    }
+    this.siren = false;
+    this.sirenT = 0;
     // charco de luz de faros (de noche)
     this.beam = new THREE.Mesh(materials.beamGeo, materials.beam);
     this.beam.position.set(0, 0.06, this.hl + 7);
@@ -457,6 +464,13 @@ export class Vehicle {
     this.headMesh.material = lightsOn ? M.headOn : M.headOff;
     this.tailMesh.material = braking || (this.reverse && this.controls.brake > 0) ? M.brake : lightsOn ? M.tailOn : M.tailOff;
     this.beam.visible = !!lightsOn && M.beamEnabled;
+    if (this.barRed) {
+      this.sirenT += dt;
+      const ph = Math.floor(this.sirenT * 6) % 4;
+      const on = this.siren && !this.dead;
+      this.barRed.material = on && (ph === 0 || ph === 2) ? M.barRedOn : M.barRedOff;
+      this.barBlue.material = on && (ph === 1 || ph === 3) ? M.barBlueOn : M.barBlueOff;
+    }
   }
 
   // Escribe las 4 ruedas en el InstancedMesh compartido a partir de "index".

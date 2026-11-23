@@ -64,6 +64,22 @@ export const VEHICLE_TYPES = {
   },
 };
 
+// Vehículos especiales (no aparecen en el tráfico normal)
+VEHICLE_TYPES.patrulla = {
+  name: 'Patrullero', category: 'Policía', price: 0, police: true,
+  dims: { L: 4.75, W: 1.85, H: 1.5 }, wheelbase: 2.8, wheelR: 0.34, ride: 0.3,
+  mass: 1550, power: 210000, maxForce: 10500, vmax: 62, grip: 1.05, drive: 'rwd', brake: 14500, steerMax: 0.58,
+  shape: { belt: 0.94, hood: 1.3, ws: 0.75, rw: 0.6, trunk: 0.9, rear: 'sedan', nose: 0.64, lightbar: true },
+  palette: [0xf4f4f2],
+};
+VEHICLE_TYPES.blindado = {
+  name: 'Blindado', category: 'Transporte de caudales', price: 0,
+  dims: { L: 5.6, W: 2.1, H: 2.3 }, wheelbase: 3.4, wheelR: 0.42, ride: 0.42,
+  mass: 4200, power: 200000, maxForce: 16000, vmax: 34, grip: 0.9, drive: 'awd', brake: 26000, steerMax: 0.5,
+  shape: { belt: 1.25, hood: 1.0, ws: 0.35, rw: 0.02, trunk: 0.05, rear: 'suv', nose: 1.0 },
+  palette: [0x4a5058],
+};
+
 // Probabilidad de aparición en el tráfico
 export const TRAFFIC_WEIGHTS = { vento: 30, pico: 25, atlas: 18, ranchero: 10, toro: 5, clasico: 5, furia: 5, aurora: 2 };
 

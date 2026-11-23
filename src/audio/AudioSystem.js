@@ -281,6 +281,88 @@ export class AudioSystem {
     }
   }
 
+  // ------------------------------------------------------------- policía
+  ensureSiren() {
+    if (this.siren || !this.started) return;
+    const c = this.ctx;
+    const o = c.createOscillator();
+    o.type = 'sawtooth';
+    const lfo = c.createOscillator();
+    lfo.frequency.value = 0.55; // "wail"
+    const lfoGain = c.createGain();
+    lfoGain.gain.value = 380;
+    lfo.connect(lfoGain).connect(o.frequency);
+    o.frequency.value = 980;
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 2200;
+    const g = c.createGain();
+    g.gain.value = 0;
+    o.connect(lp).connect(g).connect(this.sfx);
+    o.start(); lfo.start();
+    // rotor de helicóptero: ruido modulado en amplitud
+    const n = c.createBufferSource();
+    n.buffer = this.brownBuf;
+    n.loop = true;
+    const rl = c.createBiquadFilter();
+    rl.type = 'lowpass';
+    rl.frequency.value = 300;
+    const rg = c.createGain();
+    rg.gain.value = 0;
+    const am = c.createGain();
+    am.gain.value = 0.5;
+    const amLfo = c.createOscillator();
+    amLfo.type = 'square';
+    amLfo.frequency.value = 17;
+    const amDepth = c.createGain();
+    amDepth.gain.value = 0.5;
+    amLfo.connect(amDepth).connect(am.gain);
+    n.connect(rl).connect(am).connect(rg).connect(this.sfx);
+    n.start(); amLfo.start();
+    this.siren = { g, rg };
+  }
+
+  setSiren(v) {
+    if (!this.started) return;
+    if (v > 0) this.ensureSiren();
+    if (this.siren) this.siren.g.gain.setTargetAtTime(v * v * 0.12, this.ctx.currentTime, 0.1);
+  }
+
+  setRotor(v) {
+    if (!this.started) return;
+    if (v > 0) this.ensureSiren();
+    if (this.siren) this.siren.rg.gain.setTargetAtTime(v * 0.5, this.ctx.currentTime, 0.2);
+  }
+
+  // ------------------------------------------------------------- jingles
+  jingle(kind) {
+    if (!this.started) return;
+    const t = this.ctx.currentTime;
+    const seqs = {
+      pass: [[72, 0], [76, 0.12], [79, 0.24], [84, 0.36]],
+      fail: [[64, 0], [60, 0.18], [55, 0.36]],
+      start: [[67, 0], [72, 0.15]],
+      checkpoint: [[84, 0]],
+      pickup: [[79, 0], [88, 0.08]],
+      count: [[69, 0]],
+      go: [[81, 0]],
+      money: [[84, 0], [91, 0.07]],
+      star: [[57, 0], [57, 0.12]],
+    };
+    for (const [n, dt] of seqs[kind] || []) {
+      const o = this.ctx.createOscillator();
+      o.type = kind === 'fail' ? 'sawtooth' : 'triangle';
+      o.frequency.value = 440 * Math.pow(2, (n - 69) / 12);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + dt);
+      g.gain.linearRampToValueAtTime(0.16, t + dt + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dt + (kind === 'pass' ? 0.5 : 0.3));
+      o.connect(g).connect(this.sfx);
+      o.start(t + dt);
+      o.stop(t + dt + 0.6);
+    }
+  }
+
   // ------------------------------------------------------------- música del menú
   // Progresión suave sintetizada (pad + bajo + percusión liviana).
   startMusic() {

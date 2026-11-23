@@ -179,6 +179,15 @@ export class TrafficSystem {
       }
     }
     if (gapMin < Infinity) vT = Math.min(vT, Math.max(0, (gapMin - 3) * 0.75));
+    // patrullero con sirena cerca: frenar y abrirse a la derecha
+    for (const o of this.vs.vehicles) {
+      if (!o.siren || o === v) continue;
+      const l = v.toLocal(o.pos.x, o.pos.z);
+      if (l.z < 0 && l.z > -40 && Math.abs(l.x) < 6) {
+        vT = Math.min(vT, 3);
+        ctl.steer = THREE.MathUtils.clamp(ctl.steer - 0.25, -1, 1);
+      }
+    }
 
     // ---- acelerador / freno ----
     const err = vT - v.forwardSpeed;

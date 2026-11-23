@@ -179,8 +179,16 @@ export function getTemplate(typeId) {
   }
   const interior = merge(ip);
 
+  // barra de luces de patrullero (roja y azul por separado para hacerlas destellar)
+  let barRed = null, barBlue = null;
+  if (S.lightbar) {
+    const rz = (tF[0] + tR[0]) / 2;
+    barRed = merge([{ geo: box(W * 0.34, 0.12, 0.28, W * 0.19, H + 0.08, rz), color: 0xffffff }]);
+    barBlue = merge([{ geo: box(W * 0.34, 0.12, 0.28, -W * 0.19, H + 0.08, rz), color: 0xffffff }]);
+  }
+
   const tpl = {
-    body, head, tail, interior,
+    body, head, tail, interior, barRed, barBlue,
     dims: { L, W, H }, wheelbase: T.wheelbase, wheelR: T.wheelR, track: W - 0.25, ride: y0,
     driverEye: new THREE.Vector3(W * 0.22, belt + 0.45, bF[0] - 0.95),
     headPos: new THREE.Vector3(0, nose - 0.1, zF + 0.05),

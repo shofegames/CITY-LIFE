@@ -150,6 +150,7 @@ export class UI {
       row('<kbd>Mouse</kbd>', 'Mover la cámara'),
       row('<kbd>Rueda</kbd> ' + this.keysFor('camera'), 'Distancia de cámara'),
       row(this.keysFor('map'), 'Mapa'),
+      row(this.keysFor('switchChar'), 'Cambiar entre Nico y Lara'),
       row('<kbd>Esc</kbd>', 'Pausa'),
     ].join('');
     $('help-vehicle').innerHTML = [
@@ -286,8 +287,83 @@ export class UI {
     if (wanted.childElementCount !== 5) wanted.innerHTML = '<div class="star"></div>'.repeat(5);
     [...wanted.children].forEach((s, i) => s.classList.toggle('on', i < st.wanted));
     wanted.style.visibility = st.wanted > 0 ? 'visible' : 'hidden';
+    wanted.classList.toggle('blink', !!st.searching);
     $('hud-fps').classList.toggle('hidden', !this.settings.get('showFps'));
     if (this.settings.get('showFps')) $('hud-fps').textContent = `${st.fps} FPS · ${Math.round(st.renderScale * 100)}%`;
+  }
+
+  // ------------------------------------------------------------------ misiones
+  objective(text) {
+    const el = $('hud-objective');
+    if (!text) return el.classList.add('hidden');
+    if (this.tut) $('hud-tutorial').classList.add('hidden');
+    el.innerHTML = text;
+    el.classList.remove('hidden');
+  }
+
+  missionInfo(text) {
+    const el = $('hud-mission-info');
+    if (!text) return el.classList.add('hidden');
+    el.textContent = text;
+    el.classList.remove('hidden');
+  }
+
+  setTimer(sec) {
+    const el = $('hud-timer');
+    if (sec == null) return el.classList.add('hidden');
+    const s = Math.max(0, Math.ceil(sec));
+    el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    el.classList.toggle('urgent', s <= 15);
+    el.classList.remove('hidden');
+  }
+
+  subtitle(who, line, color) {
+    const el = $('hud-subtitle');
+    if (!who) return el.classList.add('hidden');
+    el.innerHTML = `<span class="who" style="color:${color}">${who}:</span>${escapeHTML(line)}`;
+    el.classList.remove('hidden');
+  }
+
+  bigMessage(title, sub, kind = 'info', secs) {
+    const el = $('hud-big');
+    el.className = `hud-big ${kind}`;
+    $('big-title').textContent = title;
+    $('big-sub').textContent = sub || '';
+    void el.offsetWidth;
+    clearTimeout(this.bigTimer);
+    this.bigTimer = setTimeout(() => el.classList.add('hidden'), (secs ?? (kind === 'info' ? 1.5 : 4.5)) * 1000);
+  }
+
+  hideBigMessage() {
+    $('hud-big').classList.add('hidden');
+  }
+
+  missionBanner(title, giver) {
+    const el = $('hud-banner');
+    $('ban-title').textContent = title.toUpperCase();
+    $('ban-giver').textContent = giver;
+    el.classList.remove('hidden');
+    clearTimeout(this.banTimer);
+    this.banTimer = setTimeout(() => el.classList.add('hidden'), 3000);
+  }
+
+  moneyDelta(amount) {
+    const el = $('hud-money-delta');
+    el.textContent = `${amount >= 0 ? '+' : '-'}$${Math.abs(amount).toLocaleString('es-AR')}`;
+    el.classList.toggle('neg', amount < 0);
+    el.classList.add('show');
+    clearTimeout(this.moneyTimer);
+    this.moneyTimer = setTimeout(() => el.classList.remove('show'), 2500);
+  }
+
+  setCharacter(info) {
+    const el = $('hud-char');
+    el.textContent = info.short;
+    el.style.color = info.color;
+  }
+
+  fade(on) {
+    $('hud-fade').classList.toggle('on', on);
   }
 
   showVehicleHUD(v, vehicle) {

@@ -36,6 +36,18 @@ export class Player {
     this._wish = new THREE.Vector3();
   }
 
+  // Cambiar de protagonista: otro modelo, mismo controlador.
+  setModel(model) {
+    const parent = this.root.parent;
+    const visible = this.root.visible;
+    if (parent) parent.remove(this.root);
+    this.model = model;
+    this.root = model.root;
+    this.root.visible = visible;
+    if (parent) parent.add(this.root);
+    this.syncModel();
+  }
+
   spawn(x, y, z, yaw) {
     this.position.set(x, y, z);
     this.velocity.set(0, 0, 0);

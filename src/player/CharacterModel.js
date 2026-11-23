@@ -17,6 +17,9 @@ export class CharacterModel {
       pants: look.pants ?? 0x2b2f3a,
       shoes: look.shoes ?? 0xf2f2f2,
       hair: look.hair ?? 0x2a1d14,
+      hairStyle: look.hairStyle ?? 'short',
+      build: look.build ?? 'regular',
+      jacket: look.jacket ?? null,
     };
     this.root = new THREE.Group();
     this.root.name = 'Character';
@@ -66,7 +69,8 @@ export class CharacterModel {
     this.spine = this.joint(this.hips, 0, 0.06, 0);
     const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.32, 4, 12), shirt);
     torso.position.y = 0.26;
-    torso.scale.set(1.12, 1, 0.68);
+    const slim = L.build === 'slim';
+    torso.scale.set(slim ? 0.98 : 1.12, 1, slim ? 0.64 : 0.68);
     torso.castShadow = true;
     this.spine.add(torso);
     this.chest = this.joint(this.spine, 0, 0.42, 0);
@@ -85,6 +89,23 @@ export class CharacterModel {
     hairMesh.position.set(0, 0.13, -0.01);
     hairMesh.rotation.x = -0.25;
     this.head.add(hairMesh);
+    if (L.hairStyle === 'long') {
+      const back = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.16, 4, 8), hair);
+      back.position.set(0, 0.06, -0.07);
+      back.scale.set(1.15, 1, 0.6);
+      this.head.add(back);
+      const tail = new THREE.Mesh(new THREE.CapsuleGeometry(0.04, 0.2, 4, 6), hair);
+      tail.position.set(0, -0.02, -0.14);
+      tail.rotation.x = 0.35;
+      this.head.add(tail);
+    }
+    if (L.jacket) {
+      const jk = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 0.3, 4, 12), this.mat(L.jacket, 0.7));
+      jk.position.y = 0.25;
+      jk.scale.set((slim ? 0.98 : 1.12) * 1.06, 1.02, (slim ? 0.64 : 0.68) * 1.1);
+      jk.castShadow = true;
+      this.spine.add(jk);
+    }
     for (const s of [-1, 1]) {
       const eye = new THREE.Mesh(new THREE.SphereGeometry(0.014, 6, 6), dark);
       eye.position.set(s * 0.04, 0.125, 0.1);
@@ -98,8 +119,8 @@ export class CharacterModel {
     // brazos
     this.arms = [];
     for (const s of [-1, 1]) {
-      const shoulder = this.joint(this.chest, s * 0.215, -0.02, 0);
-      const sleeve = this.limb(0.058, 0.3, shirt, shoulder);
+      const shoulder = this.joint(this.chest, s * (slim ? 0.19 : 0.215), -0.02, 0);
+      const sleeve = this.limb(slim ? 0.05 : 0.058, 0.3, L.jacket ? this.mat(L.jacket, 0.7) : shirt, shoulder);
       const elbow = this.joint(shoulder, 0, -0.29, 0);
       this.limb(0.048, 0.27, skin, elbow);
       const hand = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), skin);

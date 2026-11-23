@@ -179,6 +179,33 @@ kbd {
 .tut-progress span { flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.15); }
 .tut-progress span.done { background: var(--accent); }
 
+/* ---------- misiones ---------- */
+.hud-mission-info { position: absolute; top: 64px; left: 22px; padding: 6px 12px; background: rgba(10,11,15,0.7); border-radius: 4px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.hud-timer { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); padding: 6px 16px; background: rgba(10,11,15,0.75); border-radius: 6px; font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.hud-timer.urgent { color: #ff6b6b; }
+.hud-char { position: absolute; top: 20px; right: 150px; font-size: 12px; font-weight: 800; letter-spacing: 0.25em; text-shadow: 0 2px 6px rgba(0,0,0,0.9); }
+.hud-subtitle { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); max-width: min(760px, 86vw); padding: 10px 18px; background: rgba(5,6,9,0.72); border-radius: 6px; font-size: 18px; line-height: 1.4; text-align: center; }
+.hud-subtitle .who { font-weight: 800; margin-right: 6px; }
+.hud-big { position: absolute; left: 0; right: 0; top: 34%; text-align: center; text-shadow: 0 4px 18px rgba(0,0,0,0.9); animation: bigIn 0.35s ease-out; }
+.big-title { font-size: 64px; font-weight: 900; font-style: italic; letter-spacing: 0.02em; }
+.big-sub { margin-top: 6px; font-size: 20px; font-weight: 600; }
+.hud-big.pass .big-title { color: #ffd166; }
+.hud-big.fail .big-title { color: #ff4a4a; }
+.hud-big.info .big-title { color: #ffffff; font-size: 84px; }
+@keyframes bigIn { from { transform: scale(1.25); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.hud-banner { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); text-align: center; text-shadow: 0 3px 14px rgba(0,0,0,0.9); animation: bigIn 0.4s ease-out; }
+.ban-label { font-size: 13px; font-weight: 800; letter-spacing: 0.45em; color: var(--accent); }
+.ban-title { font-size: 52px; font-weight: 900; font-style: italic; }
+.ban-giver { font-size: 16px; color: var(--ink-dim); }
+.hud-money-delta { position: absolute; top: 78px; right: 22px; font-size: 22px; font-weight: 800; color: #9ff0b5; opacity: 0; transition: opacity 0.4s, transform 0.6s; text-shadow: 0 2px 6px #000; }
+.hud-money-delta.show { opacity: 1; transform: translateY(6px); }
+.hud-money-delta.neg { color: #ff8a8a; }
+.hud-fade { position: absolute; inset: 0; background: #000; opacity: 0; transition: opacity 0.45s; pointer-events: none; }
+.hud-fade.on { opacity: 1; }
+.hud-wanted.blink .star.on { animation: starBlink 0.6s steps(2) infinite; }
+@keyframes starBlink { 50% { background: rgba(255,255,255,0.25); } }
+@media (max-width: 700px) { .big-title { font-size: 40px; } .ban-title { font-size: 34px; } }
+
 .click-to-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 14px 24px; background: rgba(10,11,15,0.82); border-radius: 8px; font-size: 18px; font-weight: 600; }
 
 @media (max-height: 640px) {

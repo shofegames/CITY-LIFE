@@ -15,6 +15,7 @@ export const ACTIONS = {
   horn: { label: 'Bocina', context: 'vehicle' },
   camera: { label: 'Cambiar cámara', context: 'both' },
   map: { label: 'Mapa', context: 'both' },
+  switchChar: { label: 'Cambiar de protagonista', context: 'both' },
 };
 
 // Primera tecla = principal (configurable). Las siguientes son alternativas fijas.
@@ -31,6 +32,7 @@ export const DEFAULT_BINDINGS = {
   horn: ['KeyH'],
   camera: ['KeyC'],
   map: ['KeyM'],
+  switchChar: ['KeyQ'],
 };
 
 const NAMES = {

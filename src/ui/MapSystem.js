@@ -13,7 +13,9 @@ export class MapSystem {
     this.base = document.createElement('canvas');
     this.base.width = MAX_X - MIN_X;
     this.base.height = MAX_Z - MIN_Z;
-    this.markers = []; // {x, z, color, label} para misiones/garajes en fases siguientes
+    this.markers = []; // {x, z, color, label, size, edge}
+    this.route = null; // polilínea del GPS
+    this.search = null; // zona de búsqueda policial
     this.render();
   }
 
@@ -85,15 +87,57 @@ export class MapSystem {
     const [mx, my] = this.toMap(px, pz);
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(this.base, -mx, -my);
-    // marcadores
-    for (const m of this.markers) {
-      const [ax, ay] = this.toMap(m.x, m.z);
-      ctx.fillStyle = m.color;
+    // ruta del GPS
+    if (this.route && this.route.length > 1) {
+      ctx.strokeStyle = '#c77dff';
+      ctx.lineWidth = 5 / scale;
+      ctx.lineJoin = 'round';
       ctx.beginPath();
-      ctx.arc(ax - mx, ay - my, 5 / scale, 0, Math.PI * 2);
-      ctx.fill();
+      this.route.forEach((p, i) => {
+        const [ax, ay] = this.toMap(p.x, p.z);
+        if (i === 0) ctx.moveTo(ax - mx, ay - my); else ctx.lineTo(ax - mx, ay - my);
+      });
+      ctx.stroke();
     }
     ctx.restore();
+
+    // marcadores (los lejanos se pegan al borde del minimapa)
+    const R = W / 2 - 9;
+    const c = Math.cos(camYaw), s = Math.sin(camYaw);
+    for (const m of this.markers) {
+      const dx = (m.x - px) * scale, dz = (m.z - pz) * scale;
+      let sx = dx * c - dz * s, sy = dx * s + dz * c;
+      const d = Math.hypot(sx, sy);
+      if (d > R) {
+        if (!m.edge) continue;
+        sx *= R / d; sy *= R / d;
+      }
+      ctx.fillStyle = m.color;
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(W / 2 + sx, H / 2 + sy, m.size || 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      if (m.label) {
+        ctx.fillStyle = '#111';
+        ctx.font = 'bold 9px Segoe UI, Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(m.label, W / 2 + sx, H / 2 + sy + 0.5);
+      }
+    }
+    // círculo de búsqueda policial
+    if (this.search) {
+      const dx = (this.search.x - px) * scale, dz = (this.search.z - pz) * scale;
+      ctx.strokeStyle = 'rgba(80,140,255,0.8)';
+      ctx.fillStyle = 'rgba(80,140,255,0.12)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(W / 2 + dx * c - dz * s, H / 2 + dx * s + dz * c, this.search.r * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
 
     // flecha del jugador (dirección relativa a la cámara)
     const rel = playerYaw - (camYaw + Math.PI);
@@ -173,12 +217,27 @@ export class MapSystem {
       ctx.strokeText(lm.name, x, y + 24 * dpr);
       ctx.fillText(lm.name, x, y + 24 * dpr);
     }
+    if (this.route && this.route.length > 1) {
+      ctx.strokeStyle = '#c77dff';
+      ctx.lineWidth = 3 * dpr;
+      ctx.beginPath();
+      this.route.forEach((p, i) => (i === 0 ? ctx.moveTo(...P(p.x, p.z)) : ctx.lineTo(...P(p.x, p.z))));
+      ctx.stroke();
+    }
     for (const m of this.markers) {
       const [x, y] = P(m.x, m.z);
       ctx.fillStyle = m.color;
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1.5 * dpr;
       ctx.beginPath();
-      ctx.arc(x, y, 6 * dpr, 0, Math.PI * 2);
+      ctx.arc(x, y, 7 * dpr, 0, Math.PI * 2);
       ctx.fill();
+      ctx.stroke();
+      if (m.label) {
+        ctx.fillStyle = '#111';
+        ctx.font = `bold ${Math.round(10 * dpr)}px Segoe UI, Arial`;
+        ctx.fillText(m.label, x, y + 1);
+      }
     }
     // jugador
     const [x, y] = P(px, pz);
