@@ -160,6 +160,13 @@ kbd {
 .hud-district .d-city { font-size: 13px; letter-spacing: 0.3em; color: var(--accent); font-weight: 700; }
 .hud-speed { position: absolute; right: 26px; bottom: 110px; text-align: right; font-size: 44px; font-weight: 900; font-style: italic; text-shadow: 0 2px 8px rgba(0,0,0,0.9); }
 .hud-speed small { font-size: 14px; font-weight: 700; color: var(--ink-dim); margin-left: 4px; }
+.hud-speed { width: 220px; }
+.spd-name { font-size: 13px; font-style: normal; font-weight: 700; letter-spacing: 0.18em; color: var(--accent); text-transform: uppercase; }
+.spd-value { font-variant-numeric: tabular-nums; line-height: 1.05; }
+.spd-gear { display: inline-block; margin-left: 10px; font-size: 18px; font-style: normal; padding: 1px 8px; border-radius: 4px; background: rgba(0,0,0,0.55); vertical-align: middle; }
+.bar-vehicle { margin-top: 6px; }
+.bar-vehicle > div { background: linear-gradient(90deg, #ff9f43, #ffd166); }
+.hud-prompt .muted { font-size: 13px; }
 .hud-prompt { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); padding: 9px 16px; background: rgba(10,11,15,0.78); border-radius: 6px; font-size: 16px; }
 .hud-toast { position: absolute; top: 90px; left: 50%; transform: translateX(-50%); padding: 10px 20px; background: rgba(10,11,15,0.82); border-radius: 6px; font-size: 16px; font-weight: 600; opacity: 0; transition: opacity 0.3s; }
 .hud-toast.show { opacity: 1; }

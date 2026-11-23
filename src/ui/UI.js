@@ -290,6 +290,17 @@ export class UI {
     if (this.settings.get('showFps')) $('hud-fps').textContent = `${st.fps} FPS · ${Math.round(st.renderScale * 100)}%`;
   }
 
+  showVehicleHUD(v, vehicle) {
+    $('hud-speed').classList.toggle('hidden', !v);
+    if (v && vehicle) $('spd-name').textContent = `${vehicle.T.name} · ${vehicle.T.category}`;
+  }
+
+  updateVehicleHUD(v) {
+    $('spd-kmh').textContent = v.kmh;
+    $('spd-gear').textContent = v.dead ? '×' : v.reverse && v.forwardSpeed < -0.3 ? 'R' : v.speed < 0.3 ? 'N' : String(v.gear);
+    $('bar-vehicle').style.width = `${Math.max(0, 100 - v.damage)}%`;
+  }
+
   showClickToPlay(v) {
     $('click-to-play').classList.toggle('hidden', !v);
   }
@@ -323,6 +334,8 @@ export class UI {
         { id: 'move', text: `Caminá con <kbd>${k('forward')}</kbd> <kbd>${k('left')}</kbd> <kbd>${k('back')}</kbd> <kbd>${k('right')}</kbd> (o las flechas).`, need: 10 },
         { id: 'run', text: `Mantené <kbd>${k('sprint')}</kbd> para correr. Si lo seguís manteniendo, hacés sprint.`, need: 25 },
         { id: 'jump', text: `Presioná <kbd>${k('jump')}</kbd> para saltar.`, need: 1 },
+        { id: 'car', text: `Al lado tuyo hay un auto deportivo rojo. Acercate y presioná <kbd>${k('vehicle')}</kbd> para subirte.`, need: 1 },
+        { id: 'drive', text: `<kbd>${k('forward')}</kbd> acelera, <kbd>${k('back')}</kbd> frena y da marcha atrás, <kbd>${k('left')}</kbd> <kbd>${k('right')}</kbd> giran, <kbd>${k('handbrake')}</kbd> es el freno de mano y <kbd>${k('camera')}</kbd> cambia la cámara. Manejá un poco.`, need: 150 },
         { id: 'map', text: `Presioná <kbd>${k('map')}</kbd> para abrir el mapa de San Vega.`, need: 1 },
         { id: 'free', text: 'Con <kbd>Esc</kbd> pausás, guardás y cambiás la configuración. ¡San Vega es tuya!', need: 7 },
       ],

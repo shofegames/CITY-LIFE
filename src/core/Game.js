@@ -9,6 +9,12 @@ import { CameraSystem } from '../camera/CameraSystem.js';
 import { AudioSystem } from '../audio/AudioSystem.js';
 import { UI } from '../ui/UI.js';
 import { MapSystem } from '../ui/MapSystem.js';
+import { SurfaceMap } from '../world/SurfaceMap.js';
+import { Particles } from '../effects/Particles.js';
+import { VehicleSystem } from '../vehicles/VehicleSystem.js';
+import { RoadGraph } from '../traffic/RoadGraph.js';
+import { TrafficSystem } from '../traffic/TrafficSystem.js';
+import { TrafficLights } from '../traffic/TrafficLights.js';
 
 // ============================================================================
 // Game: arranque, máquina de estados (carga → menú → juego ↔ pausa/mapa),
@@ -16,7 +22,7 @@ import { MapSystem } from '../ui/MapSystem.js';
 // ============================================================================
 
 const FIXED = 1 / 60;
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 
 export class Game {
   constructor(canvas) {
@@ -62,6 +68,17 @@ export class Game {
       this.ui.setLoading(Math.min(0.95, i++ / total), label + '...');
       await nextFrame();
     }
+    this.ui.setLoading(0.93, 'Preparando vehículos y tráfico...');
+    await nextFrame();
+    const layout = this.world.layout;
+    this.surfaces = new SurfaceMap(layout);
+    this.particles = new Particles(this.world.scene, this.settings.get('quality') === 'low' ? 300 : 700);
+    this.particles.enabled = this.settings.preset.effects;
+    this.vehicles = new VehicleSystem(this.world, this.settings, this.surfaces, this.particles);
+    this.roads = new RoadGraph(layout);
+    this.traffic = new TrafficSystem(this.roads, this.vehicles, this.settings);
+    this.trafficLights = new TrafficLights(this.world.scene, layout, this.roads);
+    this.playerVehicle = null;
     this.ui.setLoading(0.97, 'Preparando al personaje...');
     await nextFrame();
 
@@ -129,6 +146,22 @@ export class Game {
       if (this.state === 'playing') this.ui.showClickToPlay(true);
     });
     bus.on('player:jump', () => this.ui.tutorialProgress('jump', 1));
+    bus.on('vehicle:crash', (e) => {
+      const d = this.camera.position.distanceTo(new THREE.Vector3(e.x, e.y, e.z));
+      if (d < 70) this.audio.crash(e.impact * (1 - d / 70));
+      this.particles.emit('spark', e.x, e.y, e.z, 0, 2, 0, Math.min(25, 4 + e.impact * 1.2), 3.5);
+      if (e.impact > 6) this.particles.emit('debris', e.x, e.y, e.z, 0, 2, 0, Math.min(10, e.impact * 0.5), 3);
+      if (this.playerVehicle && (e.vehicle === this.playerVehicle || e.other === this.playerVehicle)) {
+        this.cameraSystem.shake = Math.min(1.5, e.impact * 0.08);
+      }
+    });
+    bus.on('vehicle:horn', (e) => {
+      const p = this.player.position;
+      this.audio.distantHorn(Math.hypot(e.x - p.x, e.z - p.z));
+    });
+    bus.on('vehicle:destroyed', (v) => {
+      if (v === this.playerVehicle) this.ui.toast('El auto quedó destruido. Bajate con ' + this.keyLabel('vehicle') + '.', 3.5);
+    });
     bus.on('save:written', ({ ok }) => {
       if (!ok) this.ui.toast('No se pudo guardar (almacenamiento del navegador lleno o bloqueado)');
     });
@@ -164,6 +197,12 @@ export class Game {
       this.dynScale = 1;
       this.onResize();
     }
+    if (this.particles && (!key || key === 'quality')) this.particles.enabled = s.preset.effects;
+  }
+
+  keyLabel(action) {
+    const code = this.settings.get('bindings')[action][0];
+    return code.startsWith('Key') ? code.slice(3) : code;
   }
 
   onResize() {
@@ -180,6 +219,9 @@ export class Game {
 
   // ------------------------------------------------------------------ estados
   goToMenu() {
+    if (this.playerVehicle) this.leaveVehicleImmediately();
+    this.audio.stopEngine();
+    this.ui.setPrompt(null);
     this.state = 'menu';
     this.input.setGameActive(false);
     this.input.releaseLock();
@@ -215,6 +257,7 @@ export class Game {
     this.gameState = st;
     this.audio.unlock();
     this.audio.stopMusic();
+    if (this.playerVehicle) this.leaveVehicleImmediately();
     const p = st.player;
     this.player.spawn(p.x, p.y, p.z, p.yaw);
     this.player.health = st.health;
@@ -237,15 +280,86 @@ export class Game {
     this.input.releaseLock();
     this.ui.showClickToPlay(false);
     this.ui.showScreen('pause');
+    this.audio.stopEngine();
   }
 
   resume() {
     this.state = 'playing';
     this.ui.showScreen('game');
     this.input.setGameActive(true);
-    this.input.context = 'foot';
+    this.input.context = this.playerVehicle ? 'vehicle' : 'foot';
     this.input.requestLock();
     this.canvas.focus();
+    if (this.playerVehicle) this.audio.startEngine();
+  }
+
+  // ------------------------------------------------------------------ vehículos
+  enterVehicle(v) {
+    if (v.driver === 'ai') {
+      this.traffic.release(v);
+      this.vehicles.ejectDriver(v);
+      this.ui.toast(`Robaste un ${v.T.name}`);
+    } else if (v.kind === 'parked') this.vehicles.releaseFromSlot(v);
+    v.driver = 'player';
+    v.kind = 'free';
+    v.sleeping = false;
+    v.controls.hold = false;
+    this.playerVehicle = v;
+    this.player.root.visible = false;
+    this.input.context = 'vehicle';
+    this.cameraSystem.enterVehicle(v);
+    this.audio.startEngine();
+    this.ui.setPrompt(null);
+    this.ui.showVehicleHUD(true, v);
+    this.ui.tutorialProgress('car', 1);
+  }
+
+  exitVehicle() {
+    const v = this.playerVehicle;
+    if (v.speed > 5) {
+      this.ui.toast('Frená para bajarte del auto');
+      return;
+    }
+    const col = this.world.collision;
+    const l = v.left, f = v.forward;
+    const spots = [
+      [l.x * (v.hw + 0.8), l.z * (v.hw + 0.8)], [-l.x * (v.hw + 0.8), -l.z * (v.hw + 0.8)],
+      [-f.x * (v.hl + 1), -f.z * (v.hl + 1)], [f.x * (v.hl + 1), f.z * (v.hl + 1)],
+    ];
+    let spot = null;
+    for (const [dx, dz] of spots) {
+      const p = new THREE.Vector3(v.pos.x + dx, v.pos.y + 0.2, v.pos.z + dz);
+      const q = p.clone();
+      col.resolveCylinder(q, 0.34, 1.8, 0.42);
+      if (q.distanceTo(p) < 0.05 && !this.vehicles.vehicles.some((o) => o !== v && o.toLocal && Math.abs(o.toLocal(p.x, p.z).x) < o.hw + 0.3 && Math.abs(o.toLocal(p.x, p.z).z) < o.hl + 0.3)) {
+        spot = p;
+        break;
+      }
+    }
+    if (!spot) {
+      this.ui.toast('No hay lugar para bajarse acá');
+      return;
+    }
+    this.leaveVehicleImmediately(spot);
+  }
+
+  leaveVehicleImmediately(spot) {
+    const v = this.playerVehicle;
+    if (!v) return;
+    v.driver = null;
+    v.controls.throttle = 0; v.controls.brake = 0; v.controls.steer = 0; v.controls.handbrake = false;
+    v.bodyMesh.visible = true;
+    v.interiorMesh.visible = false;
+    this.playerVehicle = null;
+    const p = spot || new THREE.Vector3(v.pos.x, v.pos.y, v.pos.z);
+    this.player.spawn(p.x, p.y, p.z, v.h);
+    this.player.root.visible = true;
+    this.input.context = 'foot';
+    this.cameraSystem.exitVehicle(this.player.yaw);
+    this.cameraSystem.snapTo(this.player.position, this.player.yaw + Math.PI);
+    this.audio.stopEngine();
+    this.ui.showVehicleHUD(false);
+    this.vehicles.updateHeadlight(null, 0);
   }
 
   openMap() {
@@ -345,32 +459,88 @@ export class Game {
 
   updatePlaying(dt) {
     const input = this.input;
+    const pv = this.playerVehicle;
     const { dx, dy } = input.consumeMouse();
     if (dx || dy) {
       this.cameraSystem.applyLook(dx, dy);
       this.ui.tutorialProgress('look', Math.abs(dx) + Math.abs(dy));
     }
     if (input.wasPressed('map')) return this.openMap();
-    if (input.wasPressed('camera')) this.cameraSystem.cyclePreset();
+    if (input.wasPressed('camera')) {
+      if (pv) this.cameraSystem.cycleVehicleView();
+      else this.cameraSystem.cyclePreset();
+    }
+    // entrar / salir del vehículo
+    let nearCar = null;
+    if (!pv) {
+      nearCar = this.vehicles.nearestEnterable(this.player.position);
+      if (input.wasPressed('vehicle') && nearCar) this.enterVehicle(nearCar);
+    } else if (input.wasPressed('vehicle')) this.exitVehicle();
+    const car = this.playerVehicle;
+
+    // controles del auto
+    if (car) {
+      const c = car.controls;
+      c.throttle = input.isDown('forward') ? 1 : 0;
+      c.brake = input.isDown('back') ? 1 : 0;
+      c.steer = (input.isDown('left') ? 1 : 0) - (input.isDown('right') ? 1 : 0);
+      c.handbrake = input.isDown('handbrake');
+    }
 
     // física a paso fijo
     const before = this.player.distance;
+    const carBefore = car ? car.pos.clone() : null;
     this.acc += dt;
     let steps = 0;
     while (this.acc >= FIXED && steps < 6) {
-      this.player.fixedUpdate(FIXED, this.cameraSystem.yaw);
+      if (!car) {
+        this.player.fixedUpdate(FIXED, this.cameraSystem.yaw);
+        const hit = this.vehicles.resolvePedestrian(this.player.position, 0.34, this.player.velocity);
+        if (hit) {
+          this.player.grounded = false;
+          this.player.damage(Math.min(60, hit.speed * 4));
+          if (hit.vehicle.driver === 'ai') bus.emit('vehicle:horn', { x: hit.vehicle.pos.x, z: hit.vehicle.pos.z });
+        }
+      }
+      this.vehicles.fixedUpdate(FIXED);
+      this.traffic.fixedUpdate(FIXED, this.player.position, car, !car);
       this.acc -= FIXED;
       steps++;
     }
     if (steps === 6) this.acc = 0;
-    const moved = this.player.distance - before;
-    if (moved > 0) {
-      this.ui.tutorialProgress(input.isDown('sprint') ? 'run' : 'move', moved);
-      this.gameState.stats.distanceWalked = (this.gameState.stats.distanceWalked || 0) + moved;
+    if (car) {
+      // el jugador viaja con el auto
+      this.player.position.copy(car.pos);
+      this.player.yaw = car.h;
+      this.ui.tutorialProgress('drive', car.pos.distanceTo(carBefore));
+    } else {
+      const moved = this.player.distance - before;
+      if (moved > 0) {
+        this.ui.tutorialProgress(input.isDown('sprint') ? 'run' : 'move', moved);
+        this.gameState.stats.distanceWalked = (this.gameState.stats.distanceWalked || 0) + moved;
+      }
     }
     this.ui.tutorialProgress('free', dt);
-    this.player.update(dt);
-    this.cameraSystem.update(dt, this.player.root.position, { sprint: this.player.sprinting, run: input.isDown('sprint') && this.player.speed > 3 });
+    if (!car) this.player.update(dt);
+
+    const focus = car ? car.pos : this.player.position;
+    this.traffic.manage(dt, focus, this.camera);
+    this.vehicles.update(dt, this.world.night, focus, this.camera);
+    this.trafficLights.update(dt);
+    this.particles.update(dt, this.renderer.domElement.height, this.camera.fov);
+
+    if (car) {
+      this.cameraSystem.updateVehicle(dt, car);
+      this.vehicles.updateHeadlight(car, this.world.night);
+      this.audio.setEngine(car.rpm, car.controls.throttle, car.slip, input.isDown('horn'), !car.dead);
+      this.ui.setPrompt(null);
+    } else {
+      this.cameraSystem.update(dt, this.player.root.position, { sprint: this.player.sprinting, run: input.isDown('sprint') && this.player.speed > 3 });
+      if (nearCar) {
+        const verb = nearCar.driver === 'ai' ? 'Robar' : 'Subir al';
+        this.ui.setPrompt(`<kbd>${this.keyLabel('vehicle')}</kbd> ${verb} ${nearCar.T.name} <span class="muted">· ${nearCar.T.category}</span>`);
+      } else this.ui.setPrompt(null);
+    }
     this.gameState.playTime += dt;
 
     if (this.player.health <= 0) this.respawn();
@@ -383,6 +553,7 @@ export class Game {
         money: this.gameState.money, time: this.world.timeOfDay, health: this.player.health,
         stamina: this.player.stamina, wanted: 0, fps: this.fps, renderScale: this.settings.get('resolutionScale') * this.dynScale,
       });
+      if (car) this.ui.updateVehicleHUD(car);
     }
     this.mapTimer -= dt;
     if (this.mapTimer <= 0) {
@@ -405,6 +576,7 @@ export class Game {
   }
 
   respawn() {
+    if (this.playerVehicle) this.leaveVehicleImmediately();
     const s = this.world.layout.spawn;
     this.ui.toast('Te lastimaste. Despertás en la Avenida Central.', 3.5);
     this.player.spawn(s.x, s.y, s.z, s.yaw);

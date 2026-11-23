@@ -157,6 +157,130 @@ export class AudioSystem {
     o.stop(t + 0.1);
   }
 
+  // ------------------------------------------------------------- vehículos
+  // Motor sintetizado: dos osciladores (fundamental + subarmónico) filtrados.
+  startEngine() {
+    if (!this.started || this.engine) return;
+    const c = this.ctx;
+    const o1 = c.createOscillator(), o2 = c.createOscillator(), o3 = c.createOscillator();
+    o1.type = 'sawtooth'; o2.type = 'square'; o3.type = 'triangle';
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.Q.value = 2;
+    const g = c.createGain();
+    g.gain.value = 0;
+    const g2 = c.createGain();
+    g2.gain.value = 0.35;
+    o1.connect(lp); o2.connect(g2).connect(lp); o3.connect(lp);
+    lp.connect(g).connect(this.sfx);
+    o1.start(); o2.start(); o3.start();
+    // chirrido de neumáticos
+    const sk = c.createBufferSource();
+    sk.buffer = this.noiseBuf;
+    sk.loop = true;
+    const bp = c.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1700;
+    bp.Q.value = 6;
+    const sg = c.createGain();
+    sg.gain.value = 0;
+    sk.connect(bp).connect(sg).connect(this.sfx);
+    sk.start();
+    // bocina (dos tonos)
+    const h1 = c.createOscillator(), h2 = c.createOscillator();
+    h1.type = 'square'; h2.type = 'square';
+    h1.frequency.value = 415; h2.frequency.value = 523;
+    const hl = c.createBiquadFilter();
+    hl.type = 'lowpass';
+    hl.frequency.value = 1800;
+    const hg = c.createGain();
+    hg.gain.value = 0;
+    h1.connect(hl); h2.connect(hl);
+    hl.connect(hg).connect(this.sfx);
+    h1.start(); h2.start();
+    this.engine = { o1, o2, o3, lp, g, sg, bp, hg, nodes: [o1, o2, o3, sk, h1, h2] };
+  }
+
+  stopEngine() {
+    if (!this.engine) return;
+    const e = this.engine;
+    const t = this.ctx.currentTime;
+    e.g.gain.setTargetAtTime(0, t, 0.08);
+    e.sg.gain.setTargetAtTime(0, t, 0.05);
+    e.hg.gain.setTargetAtTime(0, t, 0.02);
+    const nodes = e.nodes;
+    setTimeout(() => nodes.forEach((n) => { try { n.stop(); } catch { /* ya detenido */ } }), 500);
+    this.engine = null;
+  }
+
+  setEngine(rpm, throttle, slip, horn, alive = true) {
+    const e = this.engine;
+    if (!e) return;
+    const t = this.ctx.currentTime;
+    const f = 18 + (rpm / 60) * 1.6;
+    e.o1.frequency.setTargetAtTime(f, t, 0.03);
+    e.o2.frequency.setTargetAtTime(f * 0.5, t, 0.03);
+    e.o3.frequency.setTargetAtTime(f * 2.01, t, 0.03);
+    e.lp.frequency.setTargetAtTime(220 + throttle * 900 + rpm * 0.12, t, 0.05);
+    e.g.gain.setTargetAtTime(alive ? 0.07 + throttle * 0.09 : 0, t, 0.06);
+    e.sg.gain.setTargetAtTime(Math.min(0.28, Math.max(0, slip - 0.35) * 0.3), t, 0.05);
+    e.hg.gain.setTargetAtTime(horn ? 0.14 : 0, t, 0.01);
+  }
+
+  crash(intensity) {
+    if (!this.started) return;
+    const t = this.ctx.currentTime;
+    const v = Math.min(1, intensity / 18);
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 900 + v * 2500;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.25 + v * 0.6, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.35 + v * 0.4);
+    src.connect(lp).connect(g).connect(this.sfx);
+    src.start(t, Math.random(), 1);
+    this.thump(0.4 + v * 0.6, 120);
+    // tintineo metálico
+    for (let i = 0; i < 3; i++) {
+      const o = this.ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = 1800 + Math.random() * 2500;
+      const og = this.ctx.createGain();
+      const st = t + 0.05 + Math.random() * 0.2;
+      og.gain.setValueAtTime(0.03 * v, st);
+      og.gain.exponentialRampToValueAtTime(0.0001, st + 0.15);
+      o.connect(og).connect(this.sfx);
+      o.start(st);
+      o.stop(st + 0.2);
+    }
+  }
+
+  // bocina de otro auto (volumen según la distancia)
+  distantHorn(dist) {
+    if (!this.started || dist > 80) return;
+    const t = this.ctx.currentTime;
+    const v = 0.12 * (1 - dist / 80);
+    const f = 360 + Math.random() * 140;
+    for (const m of [1, 1.26]) {
+      const o = this.ctx.createOscillator();
+      o.type = 'square';
+      o.frequency.value = f * m;
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 1500;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(v, t + 0.02);
+      g.gain.setValueAtTime(v, t + 0.35);
+      g.gain.linearRampToValueAtTime(0.0001, t + 0.45);
+      o.connect(lp).connect(g).connect(this.sfx);
+      o.start(t);
+      o.stop(t + 0.5);
+    }
+  }
+
   // ------------------------------------------------------------- música del menú
   // Progresión suave sintetizada (pad + bajo + percusión liviana).
   startMusic() {
